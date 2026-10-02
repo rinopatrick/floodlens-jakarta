@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b141b">
+  <meta name="theme-color" content="#efede5">
   <meta name="description" content="Simulasi dampak area banjir terhadap akses jaringan jalan ke fasilitas kesehatan di Jakarta.">
-  <title>FloodLens — Jakarta health access stress test</title>
+  <title>FloodLens — Peta akses kesehatan Jakarta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
   <style>
@@ -179,6 +182,219 @@
       .map-badge { top: 9px; left: 9px; }
     }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+  
+
+    /* Hallmark pre-emit critique: P5 H5 E4 S5 R5 V5; genre editorial-minimal; theme civic atlas; macrostructure Map / Diagram; headings hanging; body map-led; divider hairline; button solid; imagery spatial; reveal none. */
+    :root {
+      color-scheme: light;
+      --canvas: #e9ede7; --surface: #f8f6ef; --surface-raised: #e1e7de;
+      --line: #cbd4ca; --text: #1f373d; --muted: #5c7274; --faint: #819190;
+      --teal: #28776f; --teal-dark: #1f5753; --amber: #b2513c; --coral: #b2513c; --blue: #446f88;
+      --paper: #e9ede7; --sheet: #f8f6ef; --ink: #1f373d; --soft: #819190;
+      --line-strong: #a6b5ad; --accent: #b2513c; --accent-dark: #793728; --accent-wash: #efddd0;
+      --route: #28776f; --road-primary: #54716d; --road: #80948b; --baseline: #777b6e;
+      --hospital: #b2513c; --clinic: #2f716b; --origin: #446f88; --focus: #285c80;
+      --font-display: "Fraunces", Georgia, serif;
+      --font-body: "IBM Plex Sans", Arial, sans-serif;
+      --font-mono: "IBM Plex Mono", Consolas, monospace;
+      --radius: 2px;
+      --shadow: 0 14px 40px color-mix(in srgb, var(--ink) 14%, transparent);
+      --shadow-sheet: 0 14px 40px color-mix(in srgb, var(--ink) 14%, transparent), 0 2px 6px color-mix(in srgb, var(--ink) 8%, transparent);
+    }
+    html, body { width: 100%; min-width: 0; }
+    body { overflow-x: clip; overflow-y: hidden; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--font-body); -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; }
+    button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .app-shell { grid-template-rows: 62px minmax(0, 1fr); }
+    .topbar { position: relative; z-index: 700; padding: 0 26px; background: var(--sheet); border-color: var(--line); }
+    .brand { gap: 13px; }
+    .brand-mark { width: 26px; height: 26px; background: transparent; border: 0; border-radius: 0; color: var(--accent); }
+    .brand-mark svg { width: 24px; height: 24px; }
+    .brand-title { font: 600 21px/1 var(--font-display); letter-spacing: -.025em; }
+    .brand-subtitle { margin-top: 3px; color: var(--muted); font-size: 11px; letter-spacing: .015em; }
+    .topbar-right { gap: 19px; }
+    .project-tag { padding: 0; border: 0; border-radius: 0; color: var(--muted); font: 500 10px/1 var(--font-mono); letter-spacing: .065em; }
+    .connection-status { color: var(--muted); }
+    .status-dot, .status-dot.live, .status-dot.loading { box-shadow: none; }
+    .workspace { position: relative; min-height: 0; overflow: hidden; background: var(--paper); }
+    .sidebar {
+      position: absolute; z-index: 600; top: 18px; right: 20px; bottom: 18px;
+      width: min(365px, calc(100vw - 40px)); overflow: auto; padding: 25px 24px 20px;
+      border: 1px solid var(--line); border-radius: 0; background: var(--sheet); box-shadow: var(--shadow-sheet);
+      scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin;
+    }
+    .sidebar-content { min-width: 0; }
+    .eyebrow { color: var(--accent); font: 500 10px/1.3 var(--font-mono); letter-spacing: .085em; }
+    h1 { max-width: none; margin: 12px 0 11px; font: 500 31px/1.06 var(--font-display); letter-spacing: -.035em; overflow-wrap: anywhere; }
+    .intro { max-width: 34ch; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.58; }
+    .divider { height: 1px; margin: 22px 0 19px; background: var(--line); }
+    .section-heading { align-items: baseline; margin-bottom: 10px; }
+    .section-heading h2 { font-size: 13px; font-weight: 600; }
+    .step-label { color: var(--soft); font: 10px/1.3 var(--font-mono); }
+    .source-card { margin: 0; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+    .source-card:first-of-type { border-top: 1px solid var(--line); }
+    .source-icon { color: var(--route); }
+    .source-title { font-size: 12px; font-weight: 600; }
+    .source-subtitle { margin-top: 1px; color: var(--muted); font-size: 11px; }
+    .source-state { color: var(--soft); font: 9px/1.3 var(--font-mono); }
+    .source-state.ready { color: var(--route); }
+    .source-state.error { color: var(--accent-dark); }
+    .primary-button, .secondary-button, .quiet-button { min-height: 40px; border-radius: 2px; transition: background .18s ease, color .18s ease, border-color .18s ease, opacity .18s ease; }
+    .primary-button { margin-top: 12px; padding: 0 14px; border: 1px solid var(--accent); background: var(--accent); color: var(--sheet); font-size: 13px; font-weight: 600; box-shadow: none; }
+    .primary-button:hover:not(:disabled) { transform: none; border-color: var(--accent-dark); background: var(--accent-dark); }
+    .secondary-button { border: 1px solid var(--line-strong); background: transparent; color: var(--ink); }
+    .secondary-button:hover { border-color: var(--ink); background: var(--surface-raised); }
+    .quiet-button { min-height: 30px; padding: 0 5px; border: 0; background: transparent; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .035em; }
+    .quiet-button:hover { border-color: transparent; background: transparent; color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
+    .helper { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .helper strong { color: var(--ink); font-weight: 600; }
+    .origin-box, .layer-row { padding: 10px 0; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+    .origin-coordinate { color: var(--muted); font: 10px/1.4 var(--font-mono); overflow-wrap: anywhere; }
+    .origin-indicator { background: var(--origin); box-shadow: none; }
+    .layer-row label { font-size: 12px; font-weight: 550; }
+    .layer-swatch { border: 1px solid var(--accent-dark); border-radius: 0; background: var(--accent-wash); box-shadow: none; transform: rotate(45deg); }
+    .switch { border-color: var(--line-strong); background: var(--surface-raised); }
+    .switch::after { background: var(--muted); }
+    .switch:checked { border-color: var(--route); background: var(--route); }
+    .switch:checked::after { background: var(--sheet); }
+    .metrics-grid { grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr); align-items: center; gap: 8px; padding: 12px 0 13px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .metric-card { min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+    .metric-card:nth-child(1) { grid-column: 1; grid-row: 1; }
+    .metric-card:nth-child(2) { grid-column: 3; grid-row: 1; }
+    .metric-card:nth-child(3), .metric-card:nth-child(4) { display: none; }
+    .metric-card::before { display: block; margin-bottom: 3px; color: var(--muted); content: "AWAL"; font: 9px/1.3 var(--font-mono); letter-spacing: .04em; }
+    .metric-card:nth-child(2)::before { content: "SKENARIO"; color: var(--accent); }
+    .metric-label { min-height: 0; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .metric-value { margin-top: 3px; color: var(--ink); font: 500 37px/.98 var(--font-display); letter-spacing: -.045em; }
+    .metric-value.accent { color: var(--accent); }
+    .metric-value.warning { color: var(--accent-dark); }
+    .metric-sub { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+    .metrics-grid::after { grid-column: 2; grid-row: 1; color: var(--soft); content: "\2192"; font: 18px/1 var(--font-display); text-align: center; }
+    .distance-ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 11px; }
+    .distance-ledger > div { min-width: 0; }
+    .distance-ledger > div + div { padding-left: 12px; border-left: 1px solid var(--line); }
+    .distance-ledger .metric-label { font-size: 10px; }
+    .distance-ledger .metric-value { font: 500 20px/1.15 var(--font-mono); letter-spacing: -.04em; }
+    .distance-ledger .metric-sub { margin-top: 2px; }
+    .result-note { margin-top: 13px; padding: 1px 0 1px 11px; border-left: 2px solid var(--accent); color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .facility-list { display: grid; max-height: 176px; overflow: auto; margin-top: 11px; border-top: 1px solid var(--line); }
+    .facility-row { padding: 7px 1px; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+    .facility-row strong { color: var(--ink); font-size: 11px; font-weight: 550; }
+    .facility-row span { color: var(--muted); font: 10px var(--font-mono); }
+    .empty-state { padding: 10px 0; border: 0; border-radius: 0; color: var(--muted); font-size: 12px; }
+    .sidebar-footer { margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--soft); font-size: 10px; }
+    .sidebar-footer a { color: var(--accent-dark); text-decoration-color: var(--line-strong); }
+    .content { position: absolute; inset: 0; display: block; min-width: 0; min-height: 0; padding: 0; }
+    .content-bar { position: absolute; z-index: 450; top: 17px; right: 405px; left: 65px; padding: 0; pointer-events: none; }
+    .content-heading { min-width: 0; padding: 7px 10px 8px; background: color-mix(in srgb, var(--sheet) 92%, transparent); }
+    .content-heading h2 { font: 500 20px/1.1 var(--font-display); letter-spacing: -.02em; }
+    .content-heading p { margin-top: 4px; color: var(--muted); font-size: 11px; }
+    .map-actions { padding: 4px 6px; background: color-mix(in srgb, var(--sheet) 92%, transparent); pointer-events: auto; }
+    .map-wrap { position: absolute; inset: 0; min-width: 0; min-height: 0; border: 0; border-radius: 0; background: var(--paper); box-shadow: none; }
+    #map { min-height: 0; background: var(--paper); }
+    .leaflet-tile { filter: saturate(.78) sepia(.07); }
+    .map-badge { top: 17px; left: 15px; padding: 6px 9px; border: 0; border-left: 2px solid var(--accent); border-radius: 0; background: color-mix(in srgb, var(--sheet) 94%, transparent); color: var(--ink); box-shadow: none; backdrop-filter: none; }
+    .map-badge-mark { width: 21px; height: 21px; border-radius: 0; color: var(--accent); background: transparent; }
+    .map-badge strong { font-size: 11px; }
+    .map-badge small { color: var(--muted); font-size: 10px; }
+    .map-instructions { bottom: 17px; max-width: calc(100% - 430px); padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; background: color-mix(in srgb, var(--sheet) 95%, transparent); color: var(--ink); font-size: 11px; box-shadow: none; }
+    .map-instructions svg { color: var(--route); }
+    .map-instructions.is-drawing { border-color: var(--accent); }
+    .map-instructions.is-drawing svg { color: var(--accent); }
+    .map-legend { right: auto; bottom: 14px; left: 13px; gap: 6px; min-width: 170px; padding: 10px 12px; border: 0; border-left: 2px solid var(--line-strong); border-radius: 0; background: color-mix(in srgb, var(--sheet) 94%, transparent); box-shadow: none; }
+    .legend-title { color: var(--muted); font: 9px/1.2 var(--font-mono); letter-spacing: .035em; }
+    .legend-item { color: var(--ink); font-size: 10px; }
+    .legend-line { height: 2px; border-radius: 0; background: var(--road-primary); }
+    .legend-line.closed { background: var(--accent); }
+    .legend-line.route { background: var(--route); }
+    .legend-dot { border-color: var(--accent); background: var(--accent-wash); }
+    .legend-dot.origin { border-color: var(--origin); background: var(--origin); }
+    .map-error { top: 62px; left: 65px; border: 0; border-left: 2px solid var(--accent); border-radius: 0; background: var(--sheet); color: var(--accent-dark); font-size: 11px; }
+    .leaflet-container { color: var(--ink); font: inherit; }
+    .leaflet-control-attribution { background: color-mix(in srgb, var(--sheet) 92%, transparent) !important; color: var(--muted) !important; }
+    .leaflet-control-attribution a { color: var(--accent-dark) !important; }
+    .leaflet-control-zoom a, .leaflet-draw-toolbar a, .leaflet-draw-actions a { border-color: var(--line) !important; background: var(--sheet) !important; color: var(--ink) !important; }
+    .leaflet-control-scale-line { border-color: var(--muted) !important; background: color-mix(in srgb, var(--sheet) 88%, transparent) !important; color: var(--muted) !important; font: 9px var(--font-mono) !important; }
+    .origin-pin { border: 3px solid var(--sheet); background: var(--origin); box-shadow: 0 0 0 3px color-mix(in srgb, var(--origin) 28%, transparent); }
+    .health-pin { border-color: var(--sheet); background: var(--accent); box-shadow: none; }
+    .health-pin.clinic { border-color: var(--sheet); background: var(--teal); }
+    .cluster-bubble { border: 1px solid var(--sheet); background: var(--route); color: var(--sheet); box-shadow: 0 0 0 1px var(--route); font: 500 11px/1 var(--font-mono); }
+    .cluster-bubble.has-hospital { border-color: var(--sheet); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .cluster-bubble small { color: var(--ink); text-shadow: none; font: 600 9px/1 var(--font-body); }
+    .custom-tooltip { border-color: var(--line); border-radius: 2px; background: var(--sheet); color: var(--ink); box-shadow: var(--shadow-sheet); }
+    .custom-tooltip::before { border-top-color: var(--line); }
+    @media (max-width: 980px) {
+      body { overflow-x: clip; overflow-y: auto; }
+      .app-shell { height: auto; min-height: 100%; grid-template-rows: 62px auto; }
+      .workspace { display: flex; flex-direction: column; overflow: visible; }
+      .sidebar { position: relative; inset: auto; order: 0; width: auto; max-height: none; margin: 14px; padding: 22px; }
+      .sidebar-content { max-width: 720px; margin: 0 auto; }
+      .content { position: relative; inset: auto; order: 1; display: grid; grid-template-rows: auto minmax(560px, 72vh); min-height: 620px; }
+      .content-bar { position: static; align-items: center; padding: 0 16px 10px; pointer-events: auto; }
+      .content-heading, .map-actions { background: transparent; }
+      .map-wrap { position: relative; inset: auto; min-height: 560px; }
+      #map { min-height: 560px; }
+      .map-instructions { max-width: calc(100% - 220px); }
+    }
+    @media (max-width: 980px) {
+      .map-instructions { left: 200px; right: 20px; }
+    }
+    @media (max-width: 600px) {
+      .topbar { min-height: 58px; padding: 0 15px; }
+      .brand { gap: 8px; }
+      .brand-mark { width: 22px; height: 22px; }
+      .brand-mark svg { width: 21px; height: 21px; }
+      .brand-title { font-size: 19px; }
+      .brand-subtitle, .project-tag { display: none; }
+      .topbar-right { gap: 8px; }
+      .connection-status { max-width: 142px; font-size: 10px; white-space: normal; line-height: 1.2; }
+      .sidebar { margin: 9px; padding: 20px 17px; }
+      h1 { font-size: 29px; }
+      .content { grid-template-rows: auto minmax(530px, 68vh); min-height: 580px; }
+      .content-bar { align-items: flex-start; flex-direction: column; gap: 4px; padding: 0 11px 8px; }
+      .content-heading { padding: 5px 0; }
+      .content-heading h2 { font-size: 19px; }
+      .map-actions { width: 100%; justify-content: flex-start; gap: 24px; padding: 0; }
+      .map-wrap, #map { min-height: 530px; }
+      .map-badge { top: 11px; left: 13px; max-width: calc(100% - 72px); }
+      .map-legend { right: 8px; bottom: 8px; left: auto; min-width: 146px; gap: 5px; padding: 8px 9px; }
+      .legend-item { font-size: 9px; }
+      .map-instructions { right: 166px; bottom: 10px; left: 9px; transform: none; max-width: none; padding: 7px 8px; text-align: left; }
+      .map-error { top: 58px; left: 13px; max-width: calc(100% - 26px); }
+    }
+    @media (max-width: 360px) {
+      .metrics-grid { gap: 4px; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); }
+      .metric-value { font-size: 33px; }
+      .distance-ledger { gap: 7px; }
+      .distance-ledger > div + div { padding-left: 8px; }
+      .map-legend { min-width: 132px; }
+      .map-instructions { right: 147px; font-size: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  
+
+    .control-gap { height: 10px; }
+    .map-instructions { left: 200px; right: 400px; transform: none; max-width: none; justify-content: center; }
+    .map-badge { top: 88px; }
+    .leaflet-control-scale { margin-left: 190px !important; }
+    @media (max-width: 600px) {
+      .map-badge { top: 11px; }
+      .leaflet-control-scale { margin-left: 0 !important; }
+    }
+  
+
+    @media (max-width: 600px) { .sidebar h1 { max-width: none; font-size: clamp(28px, 7vw, 32px); } }
+  
+
+    @media (max-width: 980px) { .map-instructions { left: 200px; right: 20px; } }
+    @media (max-width: 600px) {
+      .map-badge { top: 76px; left: 64px; }
+      .map-instructions { left: 9px !important; right: 166px !important; transform: none !important; max-width: none; }
+      .cluster-bubble { width: 29px; height: 29px; font-size: 9px; }
+      .cluster-bubble small { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -188,10 +404,10 @@
         <div class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5c2.2-1.8 4.2-1.8 6.4 0s4.2 1.8 6.4 0 4.2-1.8 6.2 0"/><path d="M4.5 12.5c2-1.6 3.8-1.6 5.8 0s3.8 1.6 5.8 0 3.8-1.6 5.4 0"/><path d="m12 3.5 3 4.7a3.2 3.2 0 1 1-6 0l3-4.7Z"/></svg>
         </div>
-        <div><div class="brand-title">FloodLens</div><div class="brand-subtitle">Central Jakarta · health access stress test</div></div>
+        <div><div class="brand-title">FloodLens</div><div class="brand-subtitle">Peta akses kesehatan · Jakarta Pusat</div></div>
       </div>
       <div class="topbar-right">
-        <span class="project-tag">GEOSPATIAL RESILIENCE</span>
+        <span class="project-tag">ATLAS AKSES / JAKARTA</span>
         <span class="connection-status" aria-live="polite"><i class="status-dot" id="statusDot"></i><span id="connectionText">Menunggu data terbuka</span></span>
       </div>
     </header>
@@ -199,13 +415,13 @@
     <div class="workspace">
       <aside class="sidebar" aria-label="Panel kendali simulasi">
         <div class="sidebar-content">
-          <div class="eyebrow">Scenario planner · Central Jakarta pilot</div>
+          <div class="eyebrow">Jakarta Pusat / atlas akses</div>
           <h1>Kalau jalan terendam,<br>siapa yang kehilangan akses?</h1>
           <p class="intro">Gambar area skenario di atas peta risiko banjir. FloodLens menghitung ulang rute jalan menuju rumah sakit dan klinik di sekitarnya.</p>
 
           <div class="divider"></div>
           <section aria-labelledby="dataHeading">
-            <div class="section-heading"><h2 id="dataHeading">Sumber data</h2><span class="step-label">01 / DATA</span></div>
+            <div class="section-heading"><h2 id="dataHeading">Basis data</h2></div>
             <div class="source-card">
               <div class="source-top"><div class="source-name"><span class="source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 20 7.5v9L12 21l-8-4.5v-9L12 3.2Z"/><path d="m4.5 7.8 7.5 4.1 7.5-4.1M12 12v8.5M8 5.4l8 4.4"/></svg></span><div><div class="source-title">InaRISK · BNPB</div><div class="source-subtitle">Layer bahaya banjir Jabodetabekpunjur</div></div></div><span class="source-state" id="bnpbState">MEMUAT</span></div>
             </div>
@@ -221,13 +437,13 @@
 
           <div class="divider"></div>
           <section aria-labelledby="scenarioHeading">
-            <div class="section-heading"><h2 id="scenarioHeading">Atur skenario</h2><span class="step-label">02 / WHAT-IF</span></div>
+            <div class="section-heading"><h2 id="scenarioHeading">Skenario di peta</h2></div>
             <div class="layer-row">
               <label for="hazardToggle"><span class="layer-swatch" aria-hidden="true"></span>Tampilkan layer bahaya banjir</label>
               <input class="switch" id="hazardToggle" type="checkbox" checked aria-label="Tampilkan layer bahaya banjir BNPB">
             </div>
             <p class="helper">Gunakan layer BNPB sebagai referensi visual, lalu gambar zona jalan yang diasumsikan tidak dapat dilewati.</p>
-            <div style="height:10px"></div>
+            <div class="control-gap"></div>
             <div class="origin-box">
               <span class="origin-indicator" aria-hidden="true"></span>
               <div class="origin-copy"><div class="origin-title">Titik awal perjalanan</div><div class="origin-coordinate" id="originText">-6.2000, 106.8300 · Menteng</div></div>
@@ -238,12 +454,14 @@
 
           <div class="divider"></div>
           <section aria-labelledby="impactHeading">
-            <div class="section-heading"><h2 id="impactHeading">Dampak akses</h2><span class="step-label">03 / HASIL</span></div>
+            <div class="section-heading"><h2 id="impactHeading">Perubahan jangkauan</h2></div>
             <div class="metrics-grid">
-              <div class="metric-card"><div class="metric-label">Fasilitas dalam radius 5 km · awal</div><div class="metric-value" id="beforeCount">—</div><div class="metric-sub" id="beforeSub">Muat data untuk menghitung</div></div>
-              <div class="metric-card"><div class="metric-label">Fasilitas dalam radius 5 km · skenario</div><div class="metric-value accent" id="afterCount">—</div><div class="metric-sub" id="afterSub">Gambar zona terdampak</div></div>
-              <div class="metric-card"><div class="metric-label">Jarak ke RS terdekat · awal</div><div class="metric-value" id="beforeDistance">—</div><div class="metric-sub">Melalui jaringan jalan OSM</div></div>
-              <div class="metric-card"><div class="metric-label">Jarak ke RS terdekat · skenario</div><div class="metric-value warning" id="afterDistance">—</div><div class="metric-sub" id="detourSub">Menunggu skenario</div></div>
+              <div class="metric-card"><div class="metric-label">Fasilitas terjangkau · awal</div><div class="metric-value" id="beforeCount">—</div><div class="metric-sub" id="beforeSub">Muat data untuk menghitung</div></div>
+              <div class="metric-card"><div class="metric-label">Fasilitas terjangkau · skenario</div><div class="metric-value accent" id="afterCount">—</div><div class="metric-sub" id="afterSub">Gambar zona terdampak</div></div>
+            </div>
+            <div class="distance-ledger">
+              <div><div class="metric-label">RS terdekat · awal</div><div class="metric-value" id="beforeDistance">—</div><div class="metric-sub">Jarak jaringan jalan</div></div>
+              <div><div class="metric-label">RS terdekat · skenario</div><div class="metric-value warning" id="afterDistance">—</div><div class="metric-sub" id="detourSub">Menunggu skenario</div></div>
             </div>
             <div class="result-note" id="resultNote" role="status" aria-live="polite">Pilih titik awal lalu gambar zona untuk melihat dampak terhadap akses kesehatan.</div>
             <div class="facility-list" id="facilityList" aria-label="Fasilitas kesehatan terdekat"></div>
@@ -254,7 +472,7 @@
 
       <main class="content">
         <div class="content-bar">
-          <div class="content-heading"><h2>Jaringan akses fasilitas kesehatan</h2><p id="mapCaption">Jakarta · pilih titik awal pada peta untuk memulai</p></div>
+          <div class="content-heading"><h2>Akses fasilitas kesehatan</h2><p id="mapCaption">Jakarta · pilih titik awal pada peta untuk memulai</p></div>
           <div class="map-actions"><button class="quiet-button" id="clearButton" type="button" aria-label="Hapus zona skenario">HAPUS ZONA</button><button class="quiet-button" id="fitButton" type="button" aria-label="Kembalikan tampilan peta">RESET PETA</button></div>
         </div>
         <section class="map-wrap" aria-label="Peta interaktif Jakarta">
@@ -263,7 +481,7 @@
           <div class="map-error" id="mapError" role="alert"></div>
           <div class="map-instructions" id="mapInstructions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.3"/></svg><span>Muat data, lalu klik peta untuk memilih titik awal</span></div>
           <div class="map-legend" aria-label="Legenda peta">
-            <div class="legend-title">Peta & skenario</div>
+            <div class="legend-title">Simbol peta</div>
             <div class="legend-item"><span class="legend-line"></span>Jaringan jalan</div>
             <div class="legend-item"><span class="legend-line closed"></span>Ruas terdampak skenario</div>
             <div class="legend-item"><span class="legend-line route"></span>Rute setelah skenario</div>
@@ -283,6 +501,8 @@
     const PILOT_BOUNDS = { south: -6.26, west: 106.78, north: -6.14, east: 106.89 };
     const DEFAULT_ORIGIN = { lat: -6.2000, lon: 106.8300, label: "Menteng" };
     const MAX_ACCESS_METERS = 5000;
+    const cssTokens = getComputedStyle(document.documentElement);
+    const colorToken = (name) => cssTokens.getPropertyValue(name).trim();
     const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
     L.control.zoom({ position: "topright" }).addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false, maxWidth: 100 }).addTo(map);
@@ -311,7 +531,7 @@
     const drawControl = new L.Control.Draw({
       position: "topleft",
       draw: {
-        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: "#ff7e73", weight: 2, fillColor: "#ff7e73", fillOpacity: .18 } },
+        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: colorToken("--coral"), weight: 2, fillColor: colorToken("--coral"), fillOpacity: .18 } },
         polyline: false, rectangle: false, circle: false, circlemarker: false, marker: false
       },
       edit: { featureGroup: scenarioLayers, edit: true, remove: true }
@@ -533,7 +753,7 @@
       for (const road of osmData.roads) {
         if (!["motorway", "trunk", "primary", "secondary", "tertiary"].includes(road.kind)) continue;
         const latlngs = road.points.map((p) => [p.lat, p.lon]);
-        L.polyline(latlngs, { color: road.kind === "primary" ? "#879da5" : "#637a83", weight: road.kind === "primary" ? 2.0 : 1.25, opacity: .64, interactive: false }).addTo(roadsLayer);
+        L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : 1.25, opacity: .64, interactive: false }).addTo(roadsLayer);
       }
       drawFacilities();
     }
@@ -617,7 +837,7 @@
       let rendered = 0;
       for (const segment of segments) {
         if (!closed.has(segment.key)) continue;
-        L.polyline([segment.a, segment.b], { color: "#ff7e73", weight: 3.1, opacity: .95, lineCap: "round", interactive: false }).addTo(closureLayer);
+        L.polyline([segment.a, segment.b], { color: colorToken("--coral"), weight: 3.1, opacity: .95, lineCap: "round", interactive: false }).addTo(closureLayer);
         if (++rendered >= 3500) break;
       }
     }
@@ -679,8 +899,8 @@
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
         : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${lost ? `${lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`;
       $("facilityList").innerHTML = facilityRows(scenario);
-      paintPath(baseline, nearestBaseHospital, "#b3c2c7", 3, "5 7");
-      paintPath(scenario, nearestScenarioHospital, "#5ce0c0", 4);
+      paintPath(baseline, nearestBaseHospital, colorToken("--baseline"), 3, "5 7");
+      paintPath(scenario, nearestScenarioHospital, colorToken("--teal"), 4);
     }
 
     async function loadData(refresh = false) {
