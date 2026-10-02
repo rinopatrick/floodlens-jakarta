@@ -382,7 +382,7 @@
     }
     async function fetchOsmData(refresh) {
       let browserError = "Browser tidak dapat menghubungi Overpass API.";
-      for (const endpoint of ["https://overpass.kumi.systems/api/interpreter", "https://overpass-api.de/api/interpreter"]) {
+      for (const endpoint of ["https://lz4.overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass-api.de/api/interpreter"]) {
         try {
           const url = `${endpoint}?data=${encodeURIComponent(overpassQuery())}`;
           const response = await fetch(url, { signal: AbortSignal.timeout(45000) });
