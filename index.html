@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b141b">
+  <meta name="description" content="Simulasi dampak area banjir terhadap akses jaringan jalan ke fasilitas kesehatan di Jakarta.">
+  <title>FloodLens — Jakarta health access stress test</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #0b141b;
+      --surface: #111f28;
+      --surface-raised: #172832;
+      --line: #263b46;
+      --text: #eaf2f4;
+      --muted: #9aadb5;
+      --faint: #718791;
+      --teal: #5ce0c0;
+      --teal-dark: #123d3a;
+      --amber: #ffc36c;
+      --coral: #ff7e73;
+      --blue: #82c5f4;
+      --radius: 14px;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .22);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--canvas);
+      color: var(--text);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .app-shell { min-height: 100%; height: 100%; display: grid; grid-template-rows: 66px minmax(0, 1fr); }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 18px;
+      padding: 0 24px; background: rgba(11, 20, 27, .96); border-bottom: 1px solid var(--line); z-index: 500;
+    }
+    .brand { display: flex; gap: 11px; align-items: center; min-width: 0; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; background: var(--teal-dark); border: 1px solid rgba(92, 224, 192, .3); border-radius: 10px; color: var(--teal); }
+    .brand-mark svg { width: 19px; height: 19px; }
+    .brand-title { font-weight: 720; letter-spacing: -.025em; font-size: 15px; }
+    .brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .project-tag { color: #bbcbd0; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+    .connection-status { display: inline-flex; gap: 7px; align-items: center; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 3px rgba(113, 135, 145, .12); }
+    .status-dot.live { background: var(--teal); box-shadow: 0 0 0 3px rgba(92, 224, 192, .13); }
+    .status-dot.loading { background: var(--amber); box-shadow: 0 0 0 3px rgba(255, 195, 108, .13); }
+    .workspace { display: grid; grid-template-columns: 354px minmax(0, 1fr); min-height: 0; }
+    .sidebar { overflow-y: auto; border-right: 1px solid var(--line); background: var(--canvas); padding: 20px 18px 24px; }
+    .eyebrow { color: var(--teal); font-size: 10px; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; }
+    h1 { font-size: 23px; letter-spacing: -.045em; line-height: 1.13; margin: 8px 0 9px; }
+    .intro { color: var(--muted); font-size: 12px; line-height: 1.6; max-width: 310px; margin: 0; }
+    .divider { height: 1px; background: var(--line); margin: 19px 0; }
+    .section-heading { display: flex; justify-content: space-between; align-items: center; margin: 0 0 11px; }
+    .section-heading h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+    .step-label { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .09em; }
+    .source-card { background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 11px 12px; margin-bottom: 9px; }
+    .source-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .source-name { display: flex; gap: 9px; align-items: center; min-width: 0; }
+    .source-icon { color: var(--teal); display: grid; place-items: center; width: 23px; height: 23px; }
+    .source-icon svg { width: 17px; height: 17px; }
+    .source-title { font-size: 11px; font-weight: 680; }
+    .source-subtitle { color: var(--muted); font-size: 10px; margin-top: 1px; }
+    .source-state { color: var(--faint); font-size: 9px; letter-spacing: .04em; white-space: nowrap; }
+    .source-state.ready { color: var(--teal); }
+    .source-state.error { color: var(--coral); }
+    .primary-button, .secondary-button, .quiet-button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px;
+      border-radius: 10px; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .18s ease, opacity .18s ease;
+    }
+    .primary-button { width: 100%; border: 1px solid #6ce5c5; background: var(--teal); color: #08221e; font-size: 12px; font-weight: 760; box-shadow: 0 6px 18px rgba(48, 172, 144, .13); }
+    .primary-button:hover:not(:disabled) { background: #7aebd0; transform: translateY(-1px); }
+    .primary-button:disabled { cursor: wait; opacity: .72; }
+    .secondary-button { width: 100%; border: 1px solid var(--line); background: var(--surface-raised); color: var(--text); font-size: 11px; font-weight: 650; }
+    .secondary-button:hover { border-color: #52707d; background: #1b303a; }
+    .quiet-button { min-height: 32px; padding: 0 9px; background: transparent; border: 1px solid transparent; color: var(--muted); font-size: 10px; }
+    .quiet-button:hover { color: var(--text); background: var(--surface-raised); border-color: var(--line); }
+    button:focus-visible, input:focus-visible { outline: 3px solid rgba(92, 224, 192, .75); outline-offset: 2px; }
+    .button-icon { width: 15px; height: 15px; display: inline-grid; place-items: center; }
+    .button-icon svg { width: 15px; height: 15px; }
+    .helper { color: var(--muted); font-size: 10px; line-height: 1.55; margin: 8px 1px 0; }
+    .helper strong { color: #cad8dc; font-weight: 620; }
+    .origin-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 11px; }
+    .origin-copy { min-width: 0; }
+    .origin-title { font-size: 11px; font-weight: 650; }
+    .origin-coordinate { color: var(--muted); font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin-top: 3px; }
+    .origin-indicator { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 4px rgba(130, 197, 244, .12); }
+    .layer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 11px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; }
+    .layer-row label { cursor: pointer; display: flex; align-items: center; gap: 9px; font-size: 11px; font-weight: 640; }
+    .layer-swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--amber); box-shadow: 0 0 0 3px rgba(255, 195, 108, .12); }
+    .switch { appearance: none; width: 34px; height: 20px; margin: 0; border: 1px solid #435965; border-radius: 999px; background: #263b46; position: relative; cursor: pointer; transition: background .18s ease; }
+    .switch::after { content: ""; position: absolute; width: 14px; height: 14px; border-radius: 50%; top: 2px; left: 2px; background: #c8d5d8; transition: transform .18s ease; }
+    .switch:checked { background: #197763; border-color: #42bca0; }
+    .switch:checked::after { transform: translateX(14px); background: white; }
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .metric-card { border: 1px solid var(--line); background: var(--surface); padding: 11px; border-radius: 10px; min-width: 0; }
+    .metric-label { color: var(--muted); font-size: 9px; line-height: 1.35; min-height: 25px; }
+    .metric-value { font: 700 21px/1.12 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.06em; margin-top: 4px; color: var(--text); }
+    .metric-value.accent { color: var(--teal); }
+    .metric-value.warning { color: var(--amber); }
+    .metric-sub { color: var(--faint); font-size: 9px; margin-top: 4px; }
+    .result-note { border-left: 2px solid var(--amber); padding: 1px 0 1px 10px; color: var(--muted); font-size: 10px; line-height: 1.55; margin-top: 11px; }
+    .facility-list { display: grid; gap: 6px; max-height: 176px; overflow: auto; margin-top: 9px; }
+    .facility-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; border-radius: 8px; background: #0e1a21; padding: 8px 9px; }
+    .facility-row strong { font-size: 10px; font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .facility-row span { flex: none; color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .empty-state { border: 1px dashed #354a54; border-radius: 10px; padding: 14px 12px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+    .sidebar-footer { color: var(--faint); font-size: 9px; line-height: 1.55; margin-top: 16px; }
+    .sidebar-footer a { color: #aec1c7; text-decoration-color: #526872; text-underline-offset: 2px; }
+    .content { min-height: 0; min-width: 0; display: grid; grid-template-rows: 58px minmax(0, 1fr); padding: 14px; gap: 11px; }
+    .content-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 5px; }
+    .content-heading { min-width: 0; }
+    .content-heading h2 { margin: 0; font-size: 14px; letter-spacing: -.02em; }
+    .content-heading p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
+    .map-actions { display: flex; align-items: center; gap: 7px; }
+    .map-wrap { position: relative; min-height: 0; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #101c22; box-shadow: var(--shadow); }
+    #map { width: 100%; height: 100%; min-height: 480px; background: #111f26; }
+    .map-badge { position: absolute; z-index: 400; top: 13px; left: 13px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(221, 237, 241, .16); border-radius: 9px; background: rgba(11, 20, 27, .87); color: #e8f1f3; box-shadow: 0 5px 18px rgba(0,0,0,.18); backdrop-filter: blur(12px); pointer-events: none; }
+    .map-badge-mark { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; color: var(--amber); background: rgba(255, 195, 108, .13); }
+    .map-badge-mark svg { width: 14px; height: 14px; }
+    .map-badge strong { display: block; font-size: 10px; }
+    .map-badge small { display: block; color: #b7c6cb; font-size: 9px; margin-top: 1px; }
+    .map-instructions { position: absolute; z-index: 400; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 9px; border: 1px solid rgba(221,237,241,.16); background: rgba(11,20,27,.9); color: #d9e6e8; font-size: 10px; white-space: nowrap; box-shadow: 0 5px 18px rgba(0,0,0,.2); pointer-events: none; }
+    .map-instructions svg { width: 14px; height: 14px; color: var(--teal); flex: none; }
+    .map-instructions.is-drawing { border-color: rgba(255,126,115,.5); }
+    .map-instructions.is-drawing svg { color: var(--coral); }
+    .map-legend { position: absolute; z-index: 400; right: 14px; bottom: 14px; border: 1px solid rgba(221,237,241,.16); border-radius: 10px; padding: 9px 11px; background: rgba(11,20,27,.9); box-shadow: 0 5px 18px rgba(0,0,0,.2); display: grid; gap: 7px; min-width: 163px; }
+    .legend-title { color: #aebfc4; font-size: 9px; font-weight: 720; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 1px; }
+    .legend-item { display: flex; align-items: center; gap: 7px; color: #d5e0e2; font-size: 9px; }
+    .legend-line { width: 18px; height: 3px; border-radius: 2px; background: #7f959d; }
+    .legend-line.closed { background: var(--coral); }
+    .legend-line.route { background: var(--teal); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); border: 1px solid #ffe1ad; }
+    .legend-dot.origin { background: var(--blue); border-color: #c8e6ff; }
+    .map-error { position: absolute; z-index: 450; top: 62px; left: 13px; max-width: 280px; padding: 9px 11px; border: 1px solid rgba(255,126,115,.35); border-radius: 8px; background: rgba(45,22,24,.94); color: #ffd3cf; font-size: 10px; display: none; }
+    .leaflet-container { font: inherit; }
+    .leaflet-control-attribution { background: rgba(11,20,27,.78) !important; color: #9babb0 !important; font-size: 9px !important; }
+    .leaflet-control-attribution a { color: #b5c8cf !important; }
+    .leaflet-control-zoom a { color: #eaf2f4 !important; background: #12222a !important; border-color: #334953 !important; }
+    .leaflet-draw-toolbar a { background-color: #12222a !important; border-color: #334953 !important; }
+    .leaflet-draw-actions a { background: #12222a !important; color: #eaf2f4 !important; }
+    .origin-pin { width: 18px; height: 18px; border: 3px solid #e8f7ff; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 5px rgba(130,197,244,.2), 0 1px 8px rgba(0,0,0,.45); }
+    .health-pin { width: 17px; height: 17px; border: 2px solid #fff4df; border-radius: 50% 50% 50% 2px; transform: rotate(-45deg); background: var(--amber); box-shadow: 0 2px 7px rgba(0,0,0,.4); }
+    .health-pin.clinic { width: 14px; height: 14px; border-color: #d8f7ef; background: var(--teal); }
+    .facility-cluster-icon { background: transparent; border: 0; }
+    .cluster-bubble { width: 38px; height: 38px; display: grid; place-items: center; position: relative; border-radius: 50%; background: rgba(18,61,58,.94); border: 2px solid #5ce0c0; color: #eef9f6; box-shadow: 0 3px 12px rgba(0,0,0,.36), 0 0 0 4px rgba(92,224,192,.17); font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .cluster-bubble.has-hospital { border-color: #ffc36c; box-shadow: 0 3px 12px rgba(0,0,0,.36), 0 0 0 4px rgba(255,195,108,.17); }
+    .cluster-bubble small { position: absolute; bottom: -13px; left: 50%; transform: translateX(-50%); color: #f4f0e9; text-shadow: 0 1px 4px #000; font: 650 8px/1 system-ui, sans-serif; white-space: nowrap; }
+    .custom-tooltip { background: #0b141b; border: 1px solid #344b56; color: #eaf2f4; border-radius: 6px; box-shadow: 0 3px 12px rgba(0,0,0,.2); }
+    .custom-tooltip::before { border-top-color: #344b56; }
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .app-shell { height: auto; min-height: 100%; grid-template-rows: 62px auto; }
+      .workspace { grid-template-columns: 1fr; grid-template-rows: auto minmax(660px, 72vh); }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); padding: 17px 16px; }
+      .sidebar-content { max-width: 780px; margin: 0 auto; }
+      .content { min-height: 650px; padding: 11px; }
+      .content-bar { padding: 0 3px; }
+    }
+    @media (max-width: 560px) {
+      .topbar { padding: 0 14px; }
+      .project-tag { display: none; }
+      .brand-subtitle { display: none; }
+      .workspace { grid-template-rows: auto minmax(540px, 68vh); }
+      .content { grid-template-rows: auto minmax(0, 1fr); min-height: 580px; }
+      .content-bar { align-items: flex-start; flex-direction: column; padding: 1px 2px 0; }
+      .map-actions { width: 100%; justify-content: space-between; }
+      .map-wrap { min-height: 480px; }
+      #map { min-height: 480px; }
+      .map-legend { right: 9px; bottom: 9px; min-width: 143px; padding: 8px; }
+      .map-instructions { max-width: calc(100% - 165px); left: 9px; bottom: 10px; transform: none; white-space: normal; line-height: 1.35; }
+      .map-badge { top: 9px; left: 9px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="FloodLens">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5c2.2-1.8 4.2-1.8 6.4 0s4.2 1.8 6.4 0 4.2-1.8 6.2 0"/><path d="M4.5 12.5c2-1.6 3.8-1.6 5.8 0s3.8 1.6 5.8 0 3.8-1.6 5.4 0"/><path d="m12 3.5 3 4.7a3.2 3.2 0 1 1-6 0l3-4.7Z"/></svg>
+        </div>
+        <div><div class="brand-title">FloodLens</div><div class="brand-subtitle">Central Jakarta · health access stress test</div></div>
+      </div>
+      <div class="topbar-right">
+        <span class="project-tag">GEOSPATIAL RESILIENCE</span>
+        <span class="connection-status" aria-live="polite"><i class="status-dot" id="statusDot"></i><span id="connectionText">Menunggu data terbuka</span></span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Panel kendali simulasi">
+        <div class="sidebar-content">
+          <div class="eyebrow">Scenario planner · Central Jakarta pilot</div>
+          <h1>Kalau jalan terendam,<br>siapa yang kehilangan akses?</h1>
+          <p class="intro">Gambar area skenario di atas peta risiko banjir. FloodLens menghitung ulang rute jalan menuju rumah sakit dan klinik di sekitarnya.</p>
+
+          <div class="divider"></div>
+          <section aria-labelledby="dataHeading">
+            <div class="section-heading"><h2 id="dataHeading">Sumber data</h2><span class="step-label">01 / DATA</span></div>
+            <div class="source-card">
+              <div class="source-top"><div class="source-name"><span class="source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 20 7.5v9L12 21l-8-4.5v-9L12 3.2Z"/><path d="m4.5 7.8 7.5 4.1 7.5-4.1M12 12v8.5M8 5.4l8 4.4"/></svg></span><div><div class="source-title">InaRISK · BNPB</div><div class="source-subtitle">Layer bahaya banjir Jabodetabekpunjur</div></div></div><span class="source-state" id="bnpbState">MEMUAT</span></div>
+            </div>
+            <div class="source-card">
+              <div class="source-top"><div class="source-name"><span class="source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8l8-4 8 4v12"/><path d="M8 20v-6h8v6M8 9h.01M12 9h.01M16 9h.01"/><path d="M2 20h20"/></svg></span><div><div class="source-title">OpenStreetMap</div><div class="source-subtitle" id="osmSummary">Jalan & fasilitas kesehatan</div></div></div><span class="source-state" id="osmState">BELUM DIMUAT</span></div>
+            </div>
+            <button class="primary-button" id="loadButton" type="button" aria-label="Muat data jalan dan fasilitas kesehatan Jakarta">
+              <span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6.4L20 12M4 12l2 5.6A7 7 0 0 0 17.9 15"/></svg></span>
+              <span id="loadButtonText">Muat data live Jakarta</span>
+            </button>
+            <p class="helper">Mengambil jaringan jalan dan lokasi fasilitas kesehatan terbaru dari OpenStreetMap. <strong>Butuh koneksi internet.</strong></p>
+          </section>
+
+          <div class="divider"></div>
+          <section aria-labelledby="scenarioHeading">
+            <div class="section-heading"><h2 id="scenarioHeading">Atur skenario</h2><span class="step-label">02 / WHAT-IF</span></div>
+            <div class="layer-row">
+              <label for="hazardToggle"><span class="layer-swatch" aria-hidden="true"></span>Tampilkan layer bahaya banjir</label>
+              <input class="switch" id="hazardToggle" type="checkbox" checked aria-label="Tampilkan layer bahaya banjir BNPB">
+            </div>
+            <p class="helper">Gunakan layer BNPB sebagai referensi visual, lalu gambar zona jalan yang diasumsikan tidak dapat dilewati.</p>
+            <div style="height:10px"></div>
+            <div class="origin-box">
+              <span class="origin-indicator" aria-hidden="true"></span>
+              <div class="origin-copy"><div class="origin-title">Titik awal perjalanan</div><div class="origin-coordinate" id="originText">-6.2000, 106.8300 · Menteng</div></div>
+              <button class="quiet-button" id="setOriginButton" type="button" aria-label="Pilih titik awal di peta">PILIH PETA</button>
+            </div>
+            <p class="helper">Klik lokasi awal pada peta, lalu gunakan ikon poligon <strong>gambar area banjir</strong> di sisi kiri peta.</p>
+          </section>
+
+          <div class="divider"></div>
+          <section aria-labelledby="impactHeading">
+            <div class="section-heading"><h2 id="impactHeading">Dampak akses</h2><span class="step-label">03 / HASIL</span></div>
+            <div class="metrics-grid">
+              <div class="metric-card"><div class="metric-label">Fasilitas dalam radius 5 km · awal</div><div class="metric-value" id="beforeCount">—</div><div class="metric-sub" id="beforeSub">Muat data untuk menghitung</div></div>
+              <div class="metric-card"><div class="metric-label">Fasilitas dalam radius 5 km · skenario</div><div class="metric-value accent" id="afterCount">—</div><div class="metric-sub" id="afterSub">Gambar zona terdampak</div></div>
+              <div class="metric-card"><div class="metric-label">Jarak ke RS terdekat · awal</div><div class="metric-value" id="beforeDistance">—</div><div class="metric-sub">Melalui jaringan jalan OSM</div></div>
+              <div class="metric-card"><div class="metric-label">Jarak ke RS terdekat · skenario</div><div class="metric-value warning" id="afterDistance">—</div><div class="metric-sub" id="detourSub">Menunggu skenario</div></div>
+            </div>
+            <div class="result-note" id="resultNote" role="status" aria-live="polite">Pilih titik awal lalu gambar zona untuk melihat dampak terhadap akses kesehatan.</div>
+            <div class="facility-list" id="facilityList" aria-label="Fasilitas kesehatan terdekat"></div>
+          </section>
+          <div class="sidebar-footer">Skenario ilustratif untuk analisis portofolio, bukan prediksi genangan atau panduan rute darurat. Jalur dihitung dari data jalan terbuka dan tidak memasukkan kondisi lalu lintas.</div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <div class="content-bar">
+          <div class="content-heading"><h2>Jaringan akses fasilitas kesehatan</h2><p id="mapCaption">Jakarta · pilih titik awal pada peta untuk memulai</p></div>
+          <div class="map-actions"><button class="quiet-button" id="clearButton" type="button" aria-label="Hapus zona skenario">HAPUS ZONA</button><button class="quiet-button" id="fitButton" type="button" aria-label="Kembalikan tampilan peta">RESET PETA</button></div>
+        </div>
+        <section class="map-wrap" aria-label="Peta interaktif Jakarta">
+          <div id="map" role="application" aria-label="Peta Jakarta. Klik untuk menentukan titik awal, gambar poligon untuk mensimulasikan area jalan terendam."></div>
+          <div class="map-badge"><span class="map-badge-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c2.4 3.1 5.8 6.2 5.8 10a5.8 5.8 0 1 1-11.6 0c0-3.8 3.4-6.9 5.8-10Z"/><path d="M7 16.2c1.7-.9 3.5-.9 5.2 0s3.4.9 5.1 0"/></svg></span><span><strong>Bahaya banjir · BNPB</strong><small>Layer referensi · Jabodetabekpunjur</small></span></div>
+          <div class="map-error" id="mapError" role="alert"></div>
+          <div class="map-instructions" id="mapInstructions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.3"/></svg><span>Muat data, lalu klik peta untuk memilih titik awal</span></div>
+          <div class="map-legend" aria-label="Legenda peta">
+            <div class="legend-title">Peta & skenario</div>
+            <div class="legend-item"><span class="legend-line"></span>Jaringan jalan</div>
+            <div class="legend-item"><span class="legend-line closed"></span>Ruas terdampak skenario</div>
+            <div class="legend-item"><span class="legend-line route"></span>Rute setelah skenario</div>
+            <div class="legend-item"><span class="legend-dot"></span>Rumah sakit / klinik</div>
+            <div class="legend-item"><span class="legend-dot origin"></span>Titik awal</div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script>
+    const FLOOD_BOUNDS = [[-6.43, 106.59], [-5.99, 107.10]];
+    const FLOOD_SERVICE = "https://gis.bnpb.go.id/server/rest/services/inarisk/layer_bahaya_banjir_JBTBPJ/MapServer";
+    const PILOT_BOUNDS = { south: -6.26, west: 106.78, north: -6.14, east: 106.89 };
+    const DEFAULT_ORIGIN = { lat: -6.2000, lon: 106.8300, label: "Menteng" };
+    const MAX_ACCESS_METERS = 5000;
+    const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
+    L.control.zoom({ position: "topright" }).addTo(map);
+    L.control.scale({ position: "bottomleft", imperial: false, maxWidth: 100 }).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+    }).addTo(map);
+
+    const floodImageParams = new URLSearchParams({
+      bbox: `${PILOT_BOUNDS.west - .05},${PILOT_BOUNDS.south - .05},${PILOT_BOUNDS.east + .05},${PILOT_BOUNDS.north + .05}`,
+      bboxSR: "4326", imageSR: "4326", size: "1440,960", format: "png32", transparent: "true", layers: "show:0", f: "image"
+    });
+    const hazardOverlay = L.imageOverlay(`${FLOOD_SERVICE}/export?${floodImageParams}`, FLOOD_BOUNDS, { opacity: .45, interactive: false, alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
+    hazardOverlay.addTo(map);
+    hazardOverlay.on("load", () => setSourceState("bnpbState", "LAYER AKTIF", "ready"));
+    hazardOverlay.on("error", () => {
+      setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
+      showMapError("Layer BNPB tidak dapat dimuat. Peta dasar dan simulasi jaringan tetap bisa digunakan.");
+    });
+
+    const roadsLayer = L.layerGroup().addTo(map);
+    const facilitiesLayer = L.layerGroup().addTo(map);
+    const closureLayer = L.layerGroup().addTo(map);
+    const routeLayer = L.layerGroup().addTo(map);
+    const scenarioLayers = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({
+      position: "topleft",
+      draw: {
+        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: "#ff7e73", weight: 2, fillColor: "#ff7e73", fillOpacity: .18 } },
+        polyline: false, rectangle: false, circle: false, circlemarker: false, marker: false
+      },
+      edit: { featureGroup: scenarioLayers, edit: true, remove: true }
+    });
+    map.addControl(drawControl);
+
+    let osmData = null;
+    let graph = new Map();
+    let graphNodes = new Map();
+    let segments = [];
+    let facilities = [];
+    let origin = { ...DEFAULT_ORIGIN };
+    let originMarker = null;
+    let activePolygon = null;
+    let drawActive = false;
+    let baseAnalysis = null;
+    let overlayVisible = true;
+
+    const $ = (id) => document.getElementById(id);
+    const loadButton = $("loadButton");
+    const statusDot = $("statusDot");
+    const connectionText = $("connectionText");
+    const instructions = $("mapInstructions");
+
+    function setSourceState(id, text, className = "") {
+      const node = $(id);
+      node.textContent = text;
+      node.className = `source-state ${className}`.trim();
+    }
+    function overpassQuery() {
+      const bbox = `${PILOT_BOUNDS.south},${PILOT_BOUNDS.west},${PILOT_BOUNDS.north},${PILOT_BOUNDS.east}`;
+      return `[out:json][timeout:60];(way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified)$"](${bbox});node["amenity"~"^(hospital|clinic)$"](${bbox});way["amenity"~"^(hospital|clinic)$"](${bbox});node["healthcare"~"^(hospital|clinic|centre)$"](${bbox});way["healthcare"~"^(hospital|clinic|centre)$"](${bbox}););out body geom;`;
+    }
+    function simplifyOverpass(payload) {
+      const roads = [], facilities = [], seen = new Set();
+      const allowed = new Set(["motorway", "trunk", "primary", "secondary", "tertiary", "residential", "unclassified"]);
+      for (const element of payload.elements || []) {
+        const tags = element.tags || {};
+        const amenity = tags.amenity || "", healthcare = tags.healthcare || "";
+        if (["hospital", "clinic"].includes(amenity) || ["hospital", "clinic", "centre"].includes(healthcare)) {
+          const geometry = element.geometry || [];
+          let lat = element.lat, lon = element.lon;
+          if (element.type === "way" && geometry.length) {
+            lat = geometry.reduce((sum, p) => sum + p.lat, 0) / geometry.length;
+            lon = geometry.reduce((sum, p) => sum + p.lon, 0) / geometry.length;
+          }
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            const kind = amenity === "hospital" || healthcare === "hospital" ? "hospital" : "clinic";
+            const name = tags.name || (kind === "hospital" ? "Rumah sakit" : "Klinik / puskesmas");
+            const key = `${kind}|${name.toLocaleLowerCase("id-ID")}|${Math.round(lat * 10000)}|${Math.round(lon * 10000)}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              facilities.push({ id: `${element.type}/${element.id}`, name, kind, lat, lon });
+            }
+          }
+        }
+        const highway = tags.highway;
+        const nodes = element.nodes || [];
+        const geometry = element.geometry || [];
+        if (element.type !== "way" || !allowed.has(highway) || nodes.length < 2 || nodes.length !== geometry.length || tags.access === "no" || tags.access === "private" || tags.motor_vehicle === "no" || tags.motor_vehicle === "private") continue;
+        roads.push({
+          id: String(element.id), name: tags.name || "", kind: highway,
+          oneway: tags.oneway || (tags.junction === "roundabout" ? "yes" : "no"),
+          points: nodes.map((id, index) => ({ id: String(id), lat: geometry[index].lat, lon: geometry[index].lon }))
+        });
+      }
+      return { source: "© OpenStreetMap contributors · Overpass API", roads, facilities, bounds: PILOT_BOUNDS };
+    }
+    async function fetchOsmData(refresh) {
+      let browserError = "Browser tidak dapat menghubungi Overpass API.";
+      for (const endpoint of ["https://overpass.kumi.systems/api/interpreter", "https://overpass-api.de/api/interpreter"]) {
+        try {
+          const url = `${endpoint}?data=${encodeURIComponent(overpassQuery())}`;
+          const response = await fetch(url, { signal: AbortSignal.timeout(45000) });
+          if (!response.ok) throw new Error(`Overpass API ${response.status}`);
+          return simplifyOverpass(await response.json());
+        } catch (error) {
+          browserError = error.message;
+        }
+      }
+      const response = await fetch(`/api/osm${refresh ? "?refresh=1" : ""}`);
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(`Browser: ${browserError}; proxy lokal: ${data.error || response.status}`);
+      if (data.roads && data.facilities) return data;
+      throw new Error(`Browser: ${browserError}; respons proxy lokal tidak lengkap.`);
+    }
+    function setStatus(text, state = "") {
+      connectionText.textContent = text;
+      statusDot.className = `status-dot ${state}`.trim();
+    }
+    function showMapError(message) {
+      const node = $("mapError");
+      node.textContent = message;
+      node.style.display = "block";
+    }
+    function hideMapError() { $("mapError").style.display = "none"; }
+    function formatKm(meters) { return `${(meters / 1000).toFixed(1)} km`; }
+    function distanceMeters(a, b) {
+      const r = 6371000;
+      const rad = Math.PI / 180;
+      const dLat = (b.lat - a.lat) * rad;
+      const dLon = (b.lon - a.lon) * rad;
+      const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+      return 2 * r * Math.asin(Math.sqrt(x));
+    }
+    function addAdjacency(from, to, edge) {
+      if (!graph.has(from)) graph.set(from, []);
+      graph.get(from).push({ to, weight: edge.weight, key: edge.key, segment: edge });
+    }
+    function buildGraph(data) {
+      graph = new Map();
+      graphNodes = new Map();
+      segments = [];
+      for (const road of data.roads) {
+        for (let i = 0; i < road.points.length - 1; i++) {
+          const a = road.points[i], b = road.points[i + 1];
+          if (!a.id || !b.id || a.id === b.id) continue;
+          graphNodes.set(a.id, [a.lat, a.lon]);
+          graphNodes.set(b.id, [b.lat, b.lon]);
+          const edge = {
+            key: `${road.id}:${i}`,
+            from: a.id,
+            to: b.id,
+            weight: distanceMeters(a, b),
+            a: [a.lat, a.lon],
+            b: [b.lat, b.lon],
+            name: road.name,
+            kind: road.kind
+          };
+          segments.push(edge);
+          if (road.oneway === "-1") addAdjacency(b.id, a.id, edge);
+          else {
+            addAdjacency(a.id, b.id, edge);
+            if (!(["yes", "1", "true"].includes(String(road.oneway).toLowerCase()))) addAdjacency(b.id, a.id, edge);
+          }
+        }
+      }
+      return graphNodes.size;
+    }
+    function nearestNode(point) {
+      let best = null, bestDistance = Infinity;
+      for (const [nodeId, candidate] of graphNodes) {
+        const d = distanceMeters(point, { lat: candidate[0], lon: candidate[1] });
+        if (d < bestDistance) { bestDistance = d; best = nodeId; }
+      }
+      return best;
+    }
+    class MinHeap {
+      constructor() { this.items = []; }
+      push(item) {
+        this.items.push(item);
+        let i = this.items.length - 1;
+        while (i > 0) {
+          const p = Math.floor((i - 1) / 2);
+          if (this.items[p].distance <= item.distance) break;
+          this.items[i] = this.items[p]; i = p;
+        }
+        this.items[i] = item;
+      }
+      pop() {
+        if (!this.items.length) return null;
+        const first = this.items[0], last = this.items.pop();
+        if (this.items.length) {
+          let i = 0;
+          while (true) {
+            const left = i * 2 + 1, right = left + 1;
+            if (left >= this.items.length) break;
+            const child = right < this.items.length && this.items[right].distance < this.items[left].distance ? right : left;
+            if (this.items[child].distance >= last.distance) break;
+            this.items[i] = this.items[child]; i = child;
+          }
+          this.items[i] = last;
+        }
+        return first;
+      }
+      get size() { return this.items.length; }
+    }
+    function dijkstra(start, blocked = new Set()) {
+      const distances = new Map([[start, 0]]);
+      const previous = new Map();
+      const heap = new MinHeap();
+      heap.push({ node: start, distance: 0 });
+      while (heap.size) {
+        const current = heap.pop();
+        if (current.distance !== distances.get(current.node)) continue;
+        for (const edge of graph.get(current.node) || []) {
+          if (blocked.has(edge.key)) continue;
+          const nextDistance = current.distance + edge.weight;
+          if (nextDistance < (distances.get(edge.to) ?? Infinity)) {
+            distances.set(edge.to, nextDistance);
+            previous.set(edge.to, { node: current.node, segment: edge.segment });
+            heap.push({ node: edge.to, distance: nextDistance });
+          }
+        }
+      }
+      return { distances, previous };
+    }
+    function restorePath(result, end) {
+      if (!result.distances.has(end)) return [];
+      const coords = [];
+      let node = end;
+      while (node) {
+        const coordinate = graphNodes.get(node);
+        if (coordinate) coords.push(coordinate);
+        const previous = result.previous.get(node);
+        if (!previous) break;
+        node = previous.node;
+      }
+      return coords.reverse();
+    }
+    function locateFacilities() {
+      facilities = (osmData.facilities || []).map((facility) => ({
+        ...facility,
+        nodeId: nearestNode({ lat: facility.lat, lon: facility.lon })
+      })).filter((facility) => facility.nodeId);
+    }
+    function drawRoads() {
+      roadsLayer.clearLayers();
+      for (const road of osmData.roads) {
+        if (!["motorway", "trunk", "primary", "secondary", "tertiary"].includes(road.kind)) continue;
+        const latlngs = road.points.map((p) => [p.lat, p.lon]);
+        L.polyline(latlngs, { color: road.kind === "primary" ? "#879da5" : "#637a83", weight: road.kind === "primary" ? 2.0 : 1.25, opacity: .64, interactive: false }).addTo(roadsLayer);
+      }
+      drawFacilities();
+    }
+    function drawFacilities() {
+      facilitiesLayer.clearLayers();
+      if (!facilities.length) return;
+      const zoom = map.getZoom();
+      if (zoom >= 16) {
+        for (const facility of facilities) {
+          const icon = L.divIcon({ className: "", html: `<div class="health-pin ${facility.kind === "clinic" ? "clinic" : ""}"></div>`, iconSize: [18, 18], iconAnchor: [9, 15] });
+          L.marker([facility.lat, facility.lon], { icon, keyboard: true, title: facility.name, alt: facility.name }).bindTooltip(`${escapeHtml(facility.name)} · ${facility.kind === "hospital" ? "rumah sakit" : "klinik / puskesmas"}`, { className: "custom-tooltip" }).addTo(facilitiesLayer);
+        }
+        return;
+      }
+      const cellSize = zoom <= 11 ? .04 : zoom === 12 ? .025 : zoom === 13 ? .012 : zoom === 14 ? .006 : .003;
+      const clusters = new Map();
+      for (const facility of facilities) {
+        const key = `${Math.floor(facility.lat / cellSize)}:${Math.floor(facility.lon / cellSize)}`;
+        if (!clusters.has(key)) clusters.set(key, { lat: 0, lon: 0, count: 0, hospitals: 0 });
+        const cluster = clusters.get(key);
+        cluster.lat += facility.lat; cluster.lon += facility.lon; cluster.count++;
+        if (facility.kind === "hospital") cluster.hospitals++;
+      }
+      for (const cluster of clusters.values()) {
+        const lat = cluster.lat / cluster.count, lon = cluster.lon / cluster.count;
+        const icon = L.divIcon({
+          className: "facility-cluster-icon",
+          html: `<div class="cluster-bubble ${cluster.hospitals ? "has-hospital" : ""}">${cluster.count}<small>${cluster.hospitals ? `${cluster.hospitals} RS` : "klinik"}</small></div>`,
+          iconSize: [38, 42], iconAnchor: [19, 19]
+        });
+        L.marker([lat, lon], { icon, keyboard: true, title: `${cluster.count} fasilitas kesehatan` })
+          .bindTooltip(`${cluster.count} fasilitas · ${cluster.hospitals} rumah sakit`, { className: "custom-tooltip" })
+          .on("click", () => map.setView([lat, lon], Math.min(16, map.getZoom() + 2)))
+          .addTo(facilitiesLayer);
+      }
+    }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    }
+    function setOrigin(point, label = "Titik pilihan peta") {
+      origin = { lat: point.lat, lon: point.lng ?? point.lon, label };
+      if (originMarker) map.removeLayer(originMarker);
+      const icon = L.divIcon({ className: "", html: '<div class="origin-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+      originMarker = L.marker([origin.lat, origin.lon], { icon, keyboard: true, title: "Titik awal perjalanan" }).addTo(map);
+      originMarker.bindTooltip("Titik awal", { className: "custom-tooltip" });
+      $("originText").textContent = `${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)} · ${origin.label}`;
+      $("mapCaption").textContent = `Jakarta · titik awal: ${origin.label}`;
+      updateAnalysis();
+    }
+    function updateInstructions(message, drawing = false) {
+      instructions.classList.toggle("is-drawing", drawing);
+      const span = instructions.querySelector("span");
+      span.textContent = message;
+    }
+    function pointInPolygon(point, ring) {
+      let inside = false;
+      const x = point[1], y = point[0];
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i].lng, yi = ring[i].lat, xj = ring[j].lng, yj = ring[j].lat;
+        const crosses = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-12) + xi);
+        if (crosses) inside = !inside;
+      }
+      return inside;
+    }
+    function currentRing(layer) {
+      const points = layer.getLatLngs();
+      return Array.isArray(points[0]) ? points[0] : points;
+    }
+    function closedSegmentsFor(layer) {
+      if (!layer) return new Set();
+      const ring = currentRing(layer);
+      const closed = new Set();
+      for (const segment of segments) {
+        const midpoint = [(segment.a[0] + segment.b[0]) / 2, (segment.a[1] + segment.b[1]) / 2];
+        if (pointInPolygon(midpoint, ring)) closed.add(segment.key);
+      }
+      return closed;
+    }
+    function renderClosures(closed) {
+      closureLayer.clearLayers();
+      let rendered = 0;
+      for (const segment of segments) {
+        if (!closed.has(segment.key)) continue;
+        L.polyline([segment.a, segment.b], { color: "#ff7e73", weight: 3.1, opacity: .95, lineCap: "round", interactive: false }).addTo(closureLayer);
+        if (++rendered >= 3500) break;
+      }
+    }
+    function nearestFacility(result, kind = null) {
+      let best = null;
+      for (const facility of facilities) {
+        if (kind && facility.kind !== kind) continue;
+        const distance = result.distances.get(facility.nodeId);
+        if (distance === undefined) continue;
+        if (!best || distance < best.distance) best = { facility, distance };
+      }
+      return best;
+    }
+    function facilityRows(result) {
+      const sorted = facilities.map((facility) => ({ facility, distance: result.distances.get(facility.nodeId) }))
+        .filter((item) => Number.isFinite(item.distance))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 5);
+      if (!sorted.length) return '<div class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</div>';
+      return sorted.map(({ facility, distance }) => `<div class="facility-row"><strong title="${escapeHtml(facility.name)}">${escapeHtml(facility.name)}</strong><span>${formatKm(distance)}</span></div>`).join("");
+    }
+    function paintPath(result, facility, color, weight, dashArray = null) {
+      if (!facility) return;
+      const coords = restorePath(result, facility.nodeId);
+      if (coords.length < 2) return;
+      L.polyline(coords, { color, weight, opacity: .95, dashArray, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
+    }
+    function updateAnalysis() {
+      routeLayer.clearLayers();
+      closureLayer.clearLayers();
+      if (!osmData || !graph.size) return;
+      const start = nearestNode({ lat: origin.lat, lon: origin.lon });
+      if (!start) return;
+      const baseline = dijkstra(start);
+      baseAnalysis = baseline;
+      const nearestBaseHospital = nearestFacility(baseline, "hospital");
+      const nearestBase = nearestFacility(baseline);
+      const closed = closedSegmentsFor(activePolygon);
+      renderClosures(closed);
+      const scenario = dijkstra(start, closed);
+      const nearestScenarioHospital = nearestFacility(scenario, "hospital");
+      const nearestScenario = nearestFacility(scenario);
+      const beforeInRange = facilities.filter((f) => (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length;
+      const afterInRange = facilities.filter((f) => (scenario.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length;
+      const lost = Math.max(0, beforeInRange - afterInRange);
+
+      $("beforeCount").textContent = String(beforeInRange);
+      $("afterCount").textContent = String(afterInRange);
+      $("beforeSub").textContent = `${facilities.filter((f) => f.kind === "hospital" && (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} RS · ${facilities.filter((f) => f.kind === "clinic" && (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} klinik`;
+      $("afterSub").textContent = activePolygon ? `${facilities.filter((f) => f.kind === "hospital" && (scenario.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} RS · ${facilities.filter((f) => f.kind === "clinic" && (scenario.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} klinik` : "Gambar zona terdampak";
+      $("beforeDistance").textContent = nearestBaseHospital ? formatKm(nearestBaseHospital.distance) : "—";
+      $("afterDistance").textContent = nearestScenarioHospital ? formatKm(nearestScenarioHospital.distance) : "—";
+      $("detourSub").textContent = activePolygon && nearestBaseHospital && nearestScenarioHospital
+        ? `${nearestScenarioHospital.distance >= nearestBaseHospital.distance ? "+" : "−"}${formatKm(Math.abs(nearestScenarioHospital.distance - nearestBaseHospital.distance))} perubahan rute`
+        : "Gambar zona terdampak";
+      const inaccessible = nearestBase && !nearestScenario;
+      $("afterDistance").classList.toggle("warning", Boolean(activePolygon && lost > 0));
+      $("resultNote").textContent = !activePolygon
+        ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
+        : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${lost ? `${lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`;
+      $("facilityList").innerHTML = facilityRows(scenario);
+      paintPath(baseline, nearestBaseHospital, "#b3c2c7", 3, "5 7");
+      paintPath(scenario, nearestScenarioHospital, "#5ce0c0", 4);
+    }
+
+    async function loadData(refresh = false) {
+      if (loadButton.disabled) return;
+      loadButton.disabled = true;
+      $("loadButtonText").textContent = "Mengambil data terbuka…";
+      setStatus("Menghubungi Overpass API", "loading");
+      setSourceState("osmState", "MENGAMBIL DATA", "");
+      hideMapError();
+      try {
+        const payload = await fetchOsmData(refresh);
+        osmData = payload;
+        const nodeCount = buildGraph(osmData);
+        locateFacilities();
+        drawRoads();
+        setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
+        setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, "ready");
+        $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;
+        setStatus("Data publik siap digunakan", "live");
+        $("loadButtonText").textContent = "Perbarui data live";
+        updateInstructions("Klik peta untuk mengubah titik awal, atau gambar zona terdampak", false);
+        $("mapCaption").textContent = `Jakarta · ${nodeCount.toLocaleString("id-ID")} simpul jalan · ${facilities.length.toLocaleString("id-ID")} fasilitas kesehatan`;
+        map.fitBounds([[osmData.bounds.south, osmData.bounds.west], [osmData.bounds.north, osmData.bounds.east]], { padding: [16, 16] });
+      } catch (error) {
+        setSourceState("osmState", "GAGAL DIMUAT", "error");
+        setStatus("Data tidak dapat diakses", "");
+        showMapError(`Data jalan gagal dimuat: ${error.message}. Coba muat ulang beberapa saat lagi.`);
+        $("loadButtonText").textContent = "Coba muat data lagi";
+      } finally {
+        loadButton.disabled = false;
+      }
+    }
+
+    map.on("click", (event) => {
+      if (!osmData || drawActive) return;
+      setOrigin(event.latlng, "titik pilihan peta");
+      updateInstructions("Titik awal diperbarui · gambar poligon untuk menguji dampak", false);
+    });
+    map.on("draw:drawstart", () => {
+      drawActive = true;
+      updateInstructions("Klik beberapa titik, lalu tutup poligon untuk menetapkan area terdampak", true);
+    });
+    map.on("draw:drawstop", () => {
+      drawActive = false;
+      updateInstructions("Area skenario diperbarui · klik peta untuk mengganti titik awal", false);
+    });
+    map.on(L.Draw.Event.CREATED, (event) => {
+      scenarioLayers.clearLayers();
+      scenarioLayers.addLayer(event.layer);
+      activePolygon = event.layer;
+      updateAnalysis();
+      updateInstructions("Zona aktif · atur ulang atau gambar kembali untuk mencoba skenario lain", false);
+    });
+    map.on(L.Draw.Event.EDITED, () => {
+      activePolygon = scenarioLayers.getLayers()[0] || null;
+      updateAnalysis();
+    });
+    map.on(L.Draw.Event.DELETED, () => {
+      activePolygon = null;
+      updateAnalysis();
+      updateInstructions("Zona dihapus · gambar ulang area untuk membandingkan akses", false);
+    });
+    map.on("zoomend", () => { if (osmData) drawFacilities(); });
+
+    loadButton.addEventListener("click", () => loadData(true));
+    $("hazardToggle").addEventListener("change", (event) => {
+      overlayVisible = event.target.checked;
+      if (overlayVisible) hazardOverlay.addTo(map); else map.removeLayer(hazardOverlay);
+    });
+    $("clearButton").addEventListener("click", () => {
+      scenarioLayers.clearLayers();
+      activePolygon = null;
+      updateAnalysis();
+      updateInstructions("Zona skenario dihapus · gambar poligon untuk memulai", false);
+    });
+    $("fitButton").addEventListener("click", () => map.setView([-6.22, 106.83], 11));
+    $("setOriginButton").addEventListener("click", () => {
+      updateInstructions("Klik peta untuk memilih titik awal perjalanan", false);
+      $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));
+  </script>
+</body>
+</html>
