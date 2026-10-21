@@ -5,6 +5,7 @@ import {
   PILOT_BOUNDS,
 } from "./config.js";
 import { distanceMeters, formatKm, pointInPolygon } from "./geo.js";
+import { analyzeScenario, closedSegmentsFor } from "./analysis.js";
 import {
   buildGraph,
   dijkstra,
@@ -162,16 +163,6 @@ import {
       const points = layer.getLatLngs();
       return Array.isArray(points[0]) ? points[0] : points;
     }
-    function closedSegmentsFor(layer) {
-      if (!layer) return new Set();
-      const ring = currentRing(layer);
-      const closed = new Set();
-      for (const segment of graphData.segments) {
-        const midpoint = [(segment.a[0] + segment.b[0]) / 2, (segment.a[1] + segment.b[1]) / 2];
-        if (pointInPolygon(midpoint, ring)) closed.add(segment.key);
-      }
-      return closed;
-    }
     function renderClosures(closed) {
       closureLayer.clearLayers();
       let rendered = 0;
@@ -180,16 +171,6 @@ import {
         L.polyline([segment.a, segment.b], { color: colorToken("--coral"), weight: 3.1, opacity: .95, lineCap: "round", interactive: false }).addTo(closureLayer);
         if (++rendered >= 3500) break;
       }
-    }
-    function nearestFacility(result, kind = null) {
-      let best = null;
-      for (const facility of facilities) {
-        if (kind && facility.kind !== kind) continue;
-        const distance = result.distances.get(facility.nodeId);
-        if (distance === undefined) continue;
-        if (!best || distance < best.distance) best = { facility, distance };
-      }
-      return best;
     }
     function facilityRows(result) {
       const sorted = facilities.map((facility) => ({ facility, distance: result.distances.get(facility.nodeId) }))
@@ -213,34 +194,35 @@ import {
       if (!start) return;
       const baseline = dijkstra(graphData.adjacency, start);
       baseAnalysis = baseline;
-      const nearestBaseHospital = nearestFacility(baseline, "hospital");
-      const nearestBase = nearestFacility(baseline);
-      const closed = closedSegmentsFor(activePolygon);
+      const closed = activePolygon
+        ? closedSegmentsFor(graphData.segments, currentRing(activePolygon))
+        : new Set();
       renderClosures(closed);
       const scenario = dijkstra(graphData.adjacency, start, closed);
-      const nearestScenarioHospital = nearestFacility(scenario, "hospital");
-      const nearestScenario = nearestFacility(scenario);
-      const beforeInRange = facilities.filter((f) => (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length;
-      const afterInRange = facilities.filter((f) => (scenario.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length;
-      const lost = Math.max(0, beforeInRange - afterInRange);
+      const summary = analyzeScenario({
+        facilities,
+        baseline,
+        scenario,
+        closed,
+        maxAccessMeters: MAX_ACCESS_METERS,
+      });
 
-      $("beforeCount").textContent = String(beforeInRange);
-      $("afterCount").textContent = String(afterInRange);
-      $("beforeSub").textContent = `${facilities.filter((f) => f.kind === "hospital" && (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} RS · ${facilities.filter((f) => f.kind === "clinic" && (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} klinik`;
-      $("afterSub").textContent = activePolygon ? `${facilities.filter((f) => f.kind === "hospital" && (scenario.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} RS · ${facilities.filter((f) => f.kind === "clinic" && (scenario.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length} klinik` : "Gambar zona terdampak";
-      $("beforeDistance").textContent = nearestBaseHospital ? formatKm(nearestBaseHospital.distance) : "—";
-      $("afterDistance").textContent = nearestScenarioHospital ? formatKm(nearestScenarioHospital.distance) : "—";
-      $("detourSub").textContent = activePolygon && nearestBaseHospital && nearestScenarioHospital
-        ? `${nearestScenarioHospital.distance >= nearestBaseHospital.distance ? "+" : "−"}${formatKm(Math.abs(nearestScenarioHospital.distance - nearestBaseHospital.distance))} perubahan rute`
+      $("beforeCount").textContent = String(summary.beforeInRange);
+      $("afterCount").textContent = String(summary.afterInRange);
+      $("beforeSub").textContent = `${summary.beforeHospitals} RS · ${summary.beforeClinics} klinik`;
+      $("afterSub").textContent = activePolygon ? `${summary.afterHospitals} RS · ${summary.afterClinics} klinik` : "Gambar zona terdampak";
+      $("beforeDistance").textContent = summary.nearestBaseHospital ? formatKm(summary.nearestBaseHospital.distance) : "—";
+      $("afterDistance").textContent = summary.nearestScenarioHospital ? formatKm(summary.nearestScenarioHospital.distance) : "—";
+      $("detourSub").textContent = activePolygon && summary.nearestBaseHospital && summary.nearestScenarioHospital
+        ? `${summary.nearestScenarioHospital.distance >= summary.nearestBaseHospital.distance ? "+" : "−"}${formatKm(Math.abs(summary.nearestScenarioHospital.distance - summary.nearestBaseHospital.distance))} perubahan rute`
         : "Gambar zona terdampak";
-      const inaccessible = nearestBase && !nearestScenario;
-      $("afterDistance").classList.toggle("warning", Boolean(activePolygon && lost > 0));
+      $("afterDistance").classList.toggle("warning", Boolean(activePolygon && summary.lost > 0));
       $("resultNote").textContent = !activePolygon
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
-        : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${lost ? `${lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`;
+        : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`;
       $("facilityList").innerHTML = facilityRows(scenario);
-      paintPath(baseline, nearestBaseHospital, colorToken("--baseline"), 3, "5 7");
-      paintPath(scenario, nearestScenarioHospital, colorToken("--teal"), 4);
+      paintPath(baseline, summary.nearestBaseHospital, colorToken("--baseline"), 3, "5 7");
+      paintPath(scenario, summary.nearestScenarioHospital, colorToken("--teal"), 4);
     }
 
     async function loadData(refresh = false) {

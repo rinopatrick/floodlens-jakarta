@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "source": "© OpenStreetMap contributors · Overpass API",
+  "roads": [
+    {
+      "id": "101",
+      "name": "Jalan A",
+      "kind": "primary",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "1",
+          "lat": -6.2,
+          "lon": 106.83
+        },
+        {
+          "id": "2",
+          "lat": -6.2,
+          "lon": 106.831
+        }
+      ]
+    },
+    {
+      "id": "102",
+      "name": "Jembatan",
+      "kind": "secondary",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "2",
+          "lat": -6.2,
+          "lon": 106.831
+        },
+        {
+          "id": "3",
+          "lat": -6.2,
+          "lon": 106.832
+        }
+      ]
+    },
+    {
+      "id": "103",
+      "name": "Jalan RS",
+      "kind": "residential",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "3",
+          "lat": -6.2,
+          "lon": 106.832
+        },
+        {
+          "id": "4",
+          "lat": -6.2,
+          "lon": 106.833
+        }
+      ]
+    },
+    {
+      "id": "104",
+      "name": "Jalan Utara",
+      "kind": "tertiary",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "1",
+          "lat": -6.2,
+          "lon": 106.83
+        },
+        {
+          "id": "5",
+          "lat": -6.197,
+          "lon": 106.83
+        }
+      ]
+    },
+    {
+      "id": "105",
+      "name": "Jalan RS Utara",
+      "kind": "residential",
+      "oneway": "yes",
+      "points": [
+        {
+          "id": "5",
+          "lat": -6.197,
+          "lon": 106.83
+        },
+        {
+          "id": "6",
+          "lat": -6.195,
+          "lon": 106.83
+        }
+      ]
+    },
+    {
+      "id": "106",
+      "name": "Jalan Selatan",
+      "kind": "residential",
+      "oneway": "yes",
+      "points": [
+        {
+          "id": "1",
+          "lat": -6.2,
+          "lon": 106.83
+        },
+        {
+          "id": "7",
+          "lat": -6.201,
+          "lon": 106.83
+        }
+      ]
+    },
+    {
+      "id": "107",
+      "name": "Jalan Klinik",
+      "kind": "residential",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "7",
+          "lat": -6.201,
+          "lon": 106.83
+        },
+        {
+          "id": "8",
+          "lat": -6.202,
+          "lon": 106.83
+        }
+      ]
+    },
+    {
+      "id": "108",
+      "name": "Jalan Klinik Timur",
+      "kind": "residential",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "7",
+          "lat": -6.201,
+          "lon": 106.83
+        },
+        {
+          "id": "10",
+          "lat": -6.201,
+          "lon": 106.831
+        }
+      ]
+    },
+    {
+      "id": "114",
+      "name": "",
+      "kind": "primary",
+      "oneway": "no",
+      "points": [
+        {
+          "id": "1",
+          "lat": -6.2,
+          "lon": 106.83
+        },
+        {
+          "id": "14",
+          "lat": -6.196,
+          "lon": 106.829
+        }
+      ]
+    },
+    {
+      "id": "115",
+      "name": "Jalan Satu Arah",
+      "kind": "residential",
+      "oneway": "-1",
+      "points": [
+        {
+          "id": "11",
+          "lat": -6.199,
+          "lon": 106.829
+        },
+        {
+          "id": "1",
+          "lat": -6.2,
+          "lon": 106.83
+        }
+      ]
+    }
+  ],
+  "facilities": [
+    {
+      "id": "node/4",
+      "name": "RS Jembatan",
+      "kind": "hospital",
+      "lat": -6.2,
+      "lon": 106.833
+    },
+    {
+      "id": "node/6",
+      "name": "RS Utara",
+      "kind": "hospital",
+      "lat": -6.195,
+      "lon": 106.83
+    },
+    {
+      "id": "node/8",
+      "name": "Klinik Selatan",
+      "kind": "clinic",
+      "lat": -6.202,
+      "lon": 106.83
+    },
+    {
+      "id": "node/9",
+      "name": "Klinik / puskesmas",
+      "kind": "clinic",
+      "lat": -6.199,
+      "lon": 106.834
+    },
+    {
+      "id": "node/10",
+      "name": "Klinik Timur",
+      "kind": "clinic",
+      "lat": -6.201,
+      "lon": 106.831
+    }
+  ],
+  "bounds": {
+    "south": -6.26,
+    "west": 106.78,
+    "north": -6.14,
+    "east": 106.89
+  }
+}
