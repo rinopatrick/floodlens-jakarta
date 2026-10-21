@@ -15,18 +15,71 @@ FloodLens combines a public flood-hazard map with the live OpenStreetMap road ne
 - The nearest hospital route before and after the selected closure.
 - The affected road segments and five closest reachable facilities after the scenario.
 
-The app reports distances along the mapped street graph, not driving time. The 5 km threshold is a display choice for comparing scenarios, not a clinical or government access standard.
+Distances are measured along the mapped street graph, not driving time. The 5 km threshold is a display choice for comparing scenarios, not a clinical or government access standard.
 
 ## Run locally
 
-Requires Python 3.10+ and an internet connection. The server uses Python's standard library; the map loads Leaflet, map tiles, and public data services online.
+Requires Python 3.10+ and an internet connection. The runtime uses Python's standard library. The browser loads map tiles and Google Fonts from the network; Leaflet and Leaflet.draw are served locally.
 
 ```powershell
-cd floodlens-jabodetabek
+cd floodlens-jakarta
 python server.py
 ```
 
-Then open [http://localhost:8766](http://localhost:8766), select **Muat data live Jakarta**, click the map to choose an origin, and draw a polygon with the map's polygon tool. Press **Hapus zona** to return to the baseline.
+Open [http://localhost:8766](http://localhost:8766), select **Muat data live Jakarta**, click the map to choose an origin, and draw a polygon with the map's polygon tool. Press **Hapus zona** to return to the baseline.
+
+The browser never calls Overpass or BNPB directly. It requests `/api/osm` and `/api/flood` from the local server, which handles caching, upstream fallback, and response validation.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FLOODLENS_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` in a container. |
+| `FLOODLENS_PORT` | `8766` | HTTP port. Falls back to the platform `PORT` variable. |
+| `FLOODLENS_ENV` | `development` | Set to `production` to reject fixture mode. |
+| `FLOODLENS_FIXTURE_DIR` | unset | Serve deterministic OSM and flood fixtures for tests. |
+
+Fixture mode is rejected when `FLOODLENS_ENV=production`.
+
+## Tests
+
+Install the development tools once:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+npm ci
+npx playwright install chromium
+```
+
+Run every gate:
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+npm test
+npx playwright test
+```
+
+The Playwright suite starts the server in fixture mode. It never calls live Overpass or BNPB services.
+
+## Deploy
+
+Build and run the container:
+
+```powershell
+docker build -t floodlens .
+docker run --rm -p 8766:8766 -e FLOODLENS_HOST=0.0.0.0 floodlens
+```
+
+The container exposes `GET /healthz` for health checks. `render.yaml` provides the equivalent Render blueprint.
+
+Production notes:
+
+- The cache is in-memory and per process. Run a single instance or add a shared cache before scaling horizontally.
+- The server is read-only and has no authentication, rate limiting, or user data.
+- The analysis runs on the browser main thread. The pilot bounding box is sized for that; a larger area needs a Web Worker and a spatial index.
+- Map tiles and Google Fonts remain third-party network dependencies.
+- Live upstream data changes over time. CI uses fixtures; run a manual live smoke test before a release.
 
 ## Data and attribution
 
@@ -40,15 +93,42 @@ The app requests motorway, trunk, primary, secondary, tertiary, residential, and
 
 OSM data is community-mapped and can be incomplete or out of date. FloodLens only includes features present in the response for its bounded Jakarta pilot area.
 
+### Vendored libraries
+
+Leaflet 1.9.4 (BSD-2-Clause) and Leaflet.draw 1.0.4 (MIT) are vendored under `public/vendor/` with their license files.
+
 ## Method
 
-1. Convert each OSM road way into graph edges between its mapped nodes. Use OSM one-way tags when they are present.
+1. Convert each OSM road way into graph edges between its mapped nodes. Use OSM one-way tags when present.
 2. Snap the selected origin and each health facility to the nearest mapped road node.
 3. Find baseline shortest paths with Dijkstra's algorithm, using road distance as the edge weight.
 4. For the scenario, mark each road edge whose midpoint falls inside the user-drawn polygon as closed and run the shortest-path calculation again.
 5. Compare reachable health facilities and nearest-hospital distance at the same origin.
 
 The closure is an explicit user assumption. Drawing the polygon over the BNPB layer helps explain the scenario but does not turn the hazard layer into a flood-depth or road-closure dataset.
+
+## Project structure
+
+```text
+floodlens-jakarta/
+├── public/
+│   ├── index.html
+│   ├── styles.css
+│   ├── src/            # ES modules: app, API, graph, analysis, geo
+│   └── vendor/         # Leaflet and Leaflet.draw with licenses
+├── floodlens/
+│   ├── config.py       # environment, bounds, CSP, cache TTLs
+│   ├── osm.py          # Overpass query, simplification, validation
+│   ├── flood.py        # BNPB overlay client
+│   └── cache.py        # TTL cache with stale-if-error
+├── server.py           # HTTP handler, static serving, health, logs
+├── tests/              # pytest, node:test, fixtures
+├── e2e/                # Playwright scenario test
+├── specs/              # refactor plan and design notes
+├── Dockerfile
+├── render.yaml
+└── .github/workflows/ci.yml
+```
 
 ## Limitations
 
@@ -57,15 +137,7 @@ The closure is an explicit user assumption. Drawing the polygon over the BNPB la
 - Facilities are snapped to the nearest road node; the result does not model a facility entrance or internal access road.
 - A route within 5 km does not guarantee safe or timely access.
 - Coverage depends on public service availability and on OpenStreetMap completeness.
-
-## Project structure
-
-```text
-floodlens-jabodetabek/
-├── index.html   # Interactive map and client-side graph analysis
-├── server.py    # Standard-library local server and public-data proxy
-└── README.md
-```
+- The interface and report strings are in Indonesian; there is no localization layer.
 
 ## Portfolio summary
 
