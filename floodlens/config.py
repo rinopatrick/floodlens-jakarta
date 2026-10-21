@@ -26,7 +26,7 @@ CONTENT_SECURITY_POLICY = (
     "script-src 'self'; "
     "style-src 'self' https://fonts.googleapis.com; "
     "font-src https://fonts.gstatic.com; "
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org; "
+    "img-src 'self' data: blob: https://server.arcgisonline.com; "
     "connect-src 'self'; "
     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
 )

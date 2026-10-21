@@ -13,3 +13,10 @@ export const PILOT_BOUNDS = {
 export const DEFAULT_ORIGIN = { lat: -6.2, lon: 106.83, label: "Menteng" };
 
 export const MAX_ACCESS_METERS = 5000;
+
+export const TILE_LAYER = {
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+  attribution:
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> · HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+  maxZoom: 19,
+};

@@ -28,7 +28,7 @@ python server.py
 
 Open [http://localhost:8766](http://localhost:8766), select **Muat data live Jakarta**, click the map to choose an origin, and draw a polygon with the map's polygon tool. Press **Hapus zona** to return to the baseline.
 
-The browser never calls Overpass or BNPB directly. It requests `/api/osm` and `/api/flood` from the local server, which handles caching, upstream fallback, and response validation.
+The browser never calls Overpass or BNPB directly. It requests `/api/osm` and `/api/flood` from the local server, which handles caching, upstream fallback, and response validation. Basemap tiles are served by Esri World Street Map.
 
 ## Configuration
 
@@ -78,7 +78,8 @@ Production notes:
 - The cache is in-memory and per process. Run a single instance or add a shared cache before scaling horizontally.
 - The server is read-only and has no authentication, rate limiting, or user data.
 - The analysis runs on the browser main thread. The pilot bounding box is sized for that; a larger area needs a Web Worker and a spatial index.
-- Map tiles and Google Fonts remain third-party network dependencies.
+- Map tiles are provided by Esri World Street Map; for a high-traffic or commercial deployment, use a licensed tile provider or self-hosted tiles. Automated tests must stub tile requests, not hit a public tile server.
+- Google Fonts remain a third-party network dependency.
 - Live upstream data changes over time. CI uses fixtures; run a manual live smoke test before a release.
 
 ## Data and attribution
@@ -89,7 +90,7 @@ The map overlay is rendered from BNPB's [InaRISK flood-hazard MapServer for Jabo
 
 ### Roads and health facilities
 
-The app requests motorway, trunk, primary, secondary, tertiary, residential, and unclassified road ways plus mapped hospital and clinic features from [OpenStreetMap](https://www.openstreetmap.org/) through the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API), limited to the Central Jakarta pilot bounding box in the source code. OSM data is licensed under the [Open Database License](https://www.openstreetmap.org/copyright); attribution is shown on the map.
+The app requests motorway, trunk, primary, secondary, tertiary, residential, and unclassified road ways plus mapped hospital and clinic features from [OpenStreetMap](https://www.openstreetmap.org/) through the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API), limited to the Central Jakarta pilot bounding box in the source code. OSM data is licensed under the [Open Database License](https://www.openstreetmap.org/copyright); attribution is shown on the map. Basemap tiles are rendered by Esri World Street Map with HERE, Garmin, and OpenStreetMap contributors; attribution is shown in the legend.
 
 OSM data is community-mapped and can be incomplete or out of date. FloodLens only includes features present in the response for its bounded Jakarta pilot area.
 
