@@ -240,3 +240,23 @@ Repo belum punya test. Pola yang ditetapkan:
 - **Rollback**: setiap commit dapat di-revert sendiri. Deploy memakai image tag; rollback berarti menjalankan tag sebelumnya.
 - **Batasan performa**: Dijkstra dan snapping tetap di main thread. Untuk pilot area ini masih wajar; bila bounds diperluas, langkah berikutnya adalah Web Worker dan spatial index.
 - **Langkah berikutnya**: jalankan `kickoff-branch` untuk membuat branch refactor, lalu eksekusi commit 2 sampai 26 secara berurutan.
+
+## Execution Status (2026-10-21)
+
+Implemented on branch `refactor/production-hardening` in 25 commits.
+
+Gates passing locally:
+
+- `python -m pytest -q` — 43 passed.
+- `python -m ruff check .` — clean.
+- `npm test` — 13 passed.
+- `npx playwright test` — 1 scenario passed, no console or external request.
+- `bash scripts/container_smoke.sh` — image builds, non-root server starts, `/healthz` and `/` respond.
+
+Deviations from the original commit sequence:
+
+- Inline JavaScript extraction and the proxy-only API change landed in one commit.
+- Configuration and geo-helper extraction was committed after the deployment files; the files were present and tested earlier.
+- Dead-CSS cleanup removed only the superseded dark-theme `:root` variables. Full duplicate-rule removal is deferred because it needs a screenshot baseline across desktop and mobile.
+
+Known limits after this refactor: in-memory single-instance cache, no auth or rate limiting, main-thread analysis, and third-party map tiles and fonts.
