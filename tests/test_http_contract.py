@@ -3,8 +3,6 @@ import json
 import threading
 from contextlib import contextmanager
 
-import pytest
-
 import server
 
 

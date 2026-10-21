@@ -1,5 +1,8 @@
 """Configuration for the FloodLens demo server."""
 
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,3 +27,35 @@ PILOT_BOUNDS = {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST}
 
 OSM_CACHE_TTL = 900
 FLOOD_CACHE_TTL = 3600
+
+
+@dataclass(frozen=True)
+class Settings:
+    host: str
+    port: int
+    environment: str
+    fixture_dir: Path | None
+
+
+def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
+    source = os.environ if environ is None else environ
+    raw_port = source.get("FLOODLENS_PORT", str(PORT))
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise ValueError("FLOODLENS_PORT must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError("FLOODLENS_PORT must be between 1 and 65535")
+
+    environment = source.get("FLOODLENS_ENV", "development")
+    raw_fixture = source.get("FLOODLENS_FIXTURE_DIR")
+    fixture_dir = Path(raw_fixture).expanduser() if raw_fixture else None
+    if environment == "production" and fixture_dir is not None:
+        raise ValueError("FLOODLENS_FIXTURE_DIR is not allowed in production")
+
+    return Settings(
+        host=source.get("FLOODLENS_HOST", HOST),
+        port=port,
+        environment=environment,
+        fixture_dir=fixture_dir,
+    )

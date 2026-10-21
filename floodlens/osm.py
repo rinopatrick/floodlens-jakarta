@@ -121,7 +121,7 @@ def simplify_osm(payload: dict) -> bytes:
 
         points = [
             {"id": str(node_id), "lat": point["lat"], "lon": point["lon"]}
-            for node_id, point in zip(nodes, geometry)
+            for node_id, point in zip(nodes, geometry, strict=True)
             if _valid_point(point.get("lat"), point.get("lon"))
         ]
         if len(points) < 2:

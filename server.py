@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import signal
+import threading
 import time
 import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from floodlens.config import APP_VERSION, HOST, PORT, PUBLIC_DIR
+from floodlens.config import APP_VERSION, PUBLIC_DIR, Settings, load_settings
 from floodlens.flood import fetch_flood_overlay
 from floodlens.osm import fetch_osm
 
@@ -94,12 +96,21 @@ class Handler(SimpleHTTPRequestHandler):
             self._write_access_log(parsed.path, started)
 
 
-if __name__ == "__main__":
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"FloodLens running at http://localhost:{PORT}")
+def serve(settings: Settings) -> None:
+    server = ThreadingHTTPServer((settings.host, settings.port), Handler)
+    server.daemon_threads = True
+
+    def stop(_signum, _frame):
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+    print(f"FloodLens running at http://localhost:{settings.port}")
     try:
         server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nFloodLens stopped.")
     finally:
         server.server_close()
+
+
+if __name__ == "__main__":
+    serve(load_settings())
