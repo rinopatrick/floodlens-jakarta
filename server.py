@@ -3,216 +3,184 @@
 from __future__ import annotations
 
 import json
+import signal
+import threading
 import time
+import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
-
-ROOT = Path(__file__).resolve().parent
-HOST = "127.0.0.1"
-PORT = 8766
-OVERPASS_ENDPOINTS = (
-    "https://lz4.overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass-api.de/api/interpreter",
+from floodlens.config import (
+    APP_VERSION,
+    CONTENT_SECURITY_POLICY,
+    PUBLIC_DIR,
+    Settings,
+    load_settings,
 )
-FLOOD_SERVICE = (
-    "https://gis.bnpb.go.id/server/rest/services/inarisk/"
-    "layer_bahaya_banjir_JBTBPJ/MapServer"
-)
-
-# The pilot window keeps the first data pull small enough for a local demo.
-SOUTH, WEST, NORTH, EAST = -6.26, 106.78, -6.14, 106.89
-_osm_cache: tuple[float, bytes] | None = None
-
-
-def overpass_query() -> str:
-    bbox = f"{SOUTH},{WEST},{NORTH},{EAST}"
-    return f"""[out:json][timeout:60];
-(
-  way[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified)$\"]({bbox});
-  node[\"amenity\"~\"^(hospital|clinic)$\"]({bbox});
-  way[\"amenity\"~\"^(hospital|clinic)$\"]({bbox});
-  node[\"healthcare\"~\"^(hospital|clinic|centre)$\"]({bbox});
-  way[\"healthcare\"~\"^(hospital|clinic|centre)$\"]({bbox});
-);
-out body geom;"""
-
-
-def simplify_osm(payload: dict) -> bytes:
-    roads: list[dict] = []
-    facilities: list[dict] = []
-    seen_facilities: set[tuple[str, str, int, int]] = set()
-    allowed_roads = {
-        "motorway", "trunk", "primary", "secondary", "tertiary",
-        "residential", "unclassified",
-    }
-
-    for element in payload.get("elements", []):
-        tags = element.get("tags", {})
-        amenity = tags.get("amenity", "")
-        healthcare = tags.get("healthcare", "")
-        if amenity in {"hospital", "clinic"} or healthcare in {
-            "hospital", "clinic", "centre"
-        }:
-            geometry = element.get("geometry") or []
-            if element.get("type") == "node":
-                lat, lon = element.get("lat"), element.get("lon")
-            elif geometry:
-                lat = sum(point["lat"] for point in geometry) / len(geometry)
-                lon = sum(point["lon"] for point in geometry) / len(geometry)
-            else:
-                lat = lon = None
-            if lat is not None and lon is not None:
-                kind = "hospital" if amenity == "hospital" or healthcare == "hospital" else "clinic"
-                name = tags.get("name", "Rumah sakit" if kind == "hospital" else "Klinik / puskesmas")
-                dedupe_key = (kind, name.casefold(), round(lat * 10_000), round(lon * 10_000))
-                if dedupe_key not in seen_facilities:
-                    seen_facilities.add(dedupe_key)
-                    facilities.append({
-                        "id": f"{element.get('type')}/{element.get('id')}",
-                        "name": name,
-                        "kind": kind,
-                        "lat": lat,
-                        "lon": lon,
-                    })
-
-        highway = tags.get("highway")
-        nodes = element.get("nodes") or []
-        geometry = element.get("geometry") or []
-        if (
-            element.get("type") != "way"
-            or highway not in allowed_roads
-            or len(nodes) < 2
-            or len(nodes) != len(geometry)
-            or tags.get("access") in {"no", "private"}
-            or tags.get("motor_vehicle") in {"no", "private"}
-        ):
-            continue
-
-        points = [
-            {"id": str(node_id), "lat": point["lat"], "lon": point["lon"]}
-            for node_id, point in zip(nodes, geometry)
-        ]
-        roads.append({
-            "id": str(element["id"]),
-            "name": tags.get("name", ""),
-            "kind": highway,
-            "oneway": tags.get("oneway", "yes" if tags.get("junction") == "roundabout" else "no"),
-            "points": points,
-        })
-
-    return json.dumps({
-        "source": "© OpenStreetMap contributors · Overpass API",
-        "roads": roads,
-        "facilities": facilities,
-        "bounds": {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST},
-    }, separators=(",", ":")).encode("utf-8")
-
-
-def fetch_osm(force_refresh: bool = False) -> bytes:
-    global _osm_cache
-    if not force_refresh and _osm_cache and time.time() - _osm_cache[0] < 900:
-        return _osm_cache[1]
-
-    body = urlencode({"data": overpass_query()}).encode("utf-8")
-    last_error: Exception | None = None
-    for endpoint in OVERPASS_ENDPOINTS:
-        request = Request(
-            endpoint,
-            data=body,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "User-Agent": "FloodLens/0.1 local portfolio demonstration",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=75) as response:
-                raw = json.loads(response.read())
-            simplified = simplify_osm(raw)
-            _osm_cache = (time.time(), simplified)
-            return simplified
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, KeyError) as exc:
-            last_error = exc
-
-    raise RuntimeError(f"OpenStreetMap data could not be fetched: {last_error}")
-
-
-def fetch_flood_overlay() -> bytes:
-    params = urlencode({
-        "bbox": f"{WEST - 0.05},{SOUTH - 0.05},{EAST + 0.05},{NORTH + 0.05}",
-        "bboxSR": "4326",
-        "imageSR": "4326",
-        "size": "1440,960",
-        "format": "png32",
-        "transparent": "true",
-        "layers": "show:0",
-        "f": "image",
-    })
-    request = Request(
-        f"{FLOOD_SERVICE}/export?{params}",
-        headers={"User-Agent": "FloodLens/0.1 local portfolio demonstration"},
-    )
-    with urlopen(request, timeout=35) as response:
-        content_type = response.headers.get("Content-Type", "")
-        body = response.read()
-    if "image/" not in content_type or not body.startswith(b"\x89PNG"):
-        raise RuntimeError("BNPB returned an unexpected map image response")
-    return body
+from floodlens.flood import fetch_flood_overlay
+from floodlens.osm import fetch_osm, simplify_osm
 
 
 class Handler(SimpleHTTPRequestHandler):
+    fixture_dir: Path | None = None
+
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+        super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
 
     def log_message(self, format_string: str, *args) -> None:
-        print(f"[{self.log_date_time_string()}] {format_string % args}")
+        """Suppress the default Apache-style log; access logs are JSON."""
+
+    def send_response(self, code, message=None):
+        self._status = code
+        super().send_response(code, message)
+
+    def end_headers(self) -> None:
+        self.send_header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Request-ID", getattr(self, "request_id", ""))
+        if not getattr(self, "_cache_control", None):
+            path = urlsplit(self.path).path
+            if path.startswith("/vendor/"):
+                cache = "public, max-age=31536000, immutable"
+            elif path == "/" or path.endswith((".html", ".css", ".js")):
+                cache = "no-cache"
+            else:
+                cache = "no-store"
+            self.send_header("Cache-Control", cache)
+        super().end_headers()
 
     def send_bytes(self, body: bytes, content_type: str, cache: str = "no-store") -> None:
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
+        self._cache_control = cache
         self.end_headers()
         self.wfile.write(body)
 
-    def send_error_json(self, message: str, status: int = 502) -> None:
-        body = json.dumps({"error": message}).encode("utf-8")
+    def send_error_json(
+        self,
+        message: str,
+        status: int = 502,
+        code: str = "upstream_unavailable",
+    ) -> None:
+        body = json.dumps(
+            {"error": {"code": code, "message": message}}
+        ).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._cache_control = "no-store"
         self.end_headers()
         self.wfile.write(body)
 
+    def _write_access_log(self, path: str, started: float) -> None:
+        record = {
+            "level": "info",
+            "event": "request",
+            "request_id": self.request_id,
+            "method": self.command,
+            "path": path,
+            "status": getattr(self, "_status", 0),
+            "duration_ms": round((time.monotonic() - started) * 1000, 2),
+        }
+        print(json.dumps(record, separators=(",", ":")), flush=True)
+
+    def _fixture_bytes(self, name: str) -> bytes:
+        if self.fixture_dir is None:
+            raise RuntimeError("fixture mode is not enabled")
+        path = self.fixture_dir / name
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            raise RuntimeError(f"fixture {name} is unavailable") from exc
+
     def do_GET(self) -> None:
+        started = time.monotonic()
+        self.request_id = uuid.uuid4().hex[:12]
+        self._cache_control = None
         parsed = urlsplit(self.path)
-        if parsed.path == "/api/osm":
-            try:
-                refresh = "refresh=1" in parsed.query
-                self.send_bytes(fetch_osm(refresh), "application/json; charset=utf-8")
-            except Exception as exc:  # surfaced as a useful local network message
-                self.send_error_json(str(exc))
-            return
-        if parsed.path == "/api/flood":
-            try:
-                self.send_bytes(fetch_flood_overlay(), "image/png", "public, max-age=3600")
-            except Exception as exc:
-                self.send_error_json(str(exc))
-            return
-        super().do_GET()
+        try:
+            if parsed.path == "/healthz":
+                body = json.dumps(
+                    {"status": "ok", "version": APP_VERSION}, separators=(",", ":")
+                ).encode("utf-8")
+                self.send_bytes(body, "application/json; charset=utf-8")
+                return
+            if parsed.path == "/api/osm":
+                try:
+                    if self.fixture_dir is not None:
+                        raw = json.loads(self._fixture_bytes("overpass_synthetic.json"))
+                        body = simplify_osm(raw)
+                    else:
+                        refresh = "refresh=1" in parsed.query
+                        body = fetch_osm(refresh)
+                    self.send_bytes(body, "application/json; charset=utf-8")
+                except Exception as exc:  # surfaced as a useful local network message
+                    code = (
+                        "fixture_unavailable"
+                        if self.fixture_dir is not None
+                        else "upstream_unavailable"
+                    )
+                    self.send_error_json(str(exc), code=code)
+                return
+            if parsed.path == "/api/flood":
+                try:
+                    if self.fixture_dir is not None:
+                        body = self._fixture_bytes("flood.png")
+                        if not body.startswith(b"\x89PNG"):
+                            raise RuntimeError("fixture flood.png is not a PNG")
+                    else:
+                        body = fetch_flood_overlay()
+                    self.send_bytes(body, "image/png", "public, max-age=3600")
+                except Exception as exc:
+                    code = (
+                        "fixture_unavailable"
+                        if self.fixture_dir is not None
+                        else "upstream_unavailable"
+                    )
+                    self.send_error_json(str(exc), code=code)
+                return
+            super().do_GET()
+        finally:
+            self._write_access_log(parsed.path, started)
+
+
+def serve(settings: Settings) -> None:
+    server = ThreadingHTTPServer((settings.host, settings.port), Handler)
+    server.daemon_threads = True
+    Handler.fixture_dir = settings.fixture_dir
+    if settings.fixture_dir is not None:
+        print(
+            json.dumps(
+                {
+                    "level": "warning",
+                    "event": "fixture_mode",
+                    "path": str(settings.fixture_dir),
+                },
+                separators=(",", ":"),
+            ),
+            flush=True,
+        )
+
+    def stop(_signum, _frame):
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+    print(f"FloodLens running at http://localhost:{settings.port}")
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"FloodLens running at http://localhost:{PORT}")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nFloodLens stopped.")
-    finally:
-        server.server_close()
+    serve(load_settings())

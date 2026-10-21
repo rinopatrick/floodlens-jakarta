@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#efede5">
+  <meta name="description" content="Simulasi dampak area banjir terhadap akses jaringan jalan ke fasilitas kesehatan di Jakarta.">
+  <link rel="icon" href="data:,">
+  <title>FloodLens — Peta akses kesehatan Jakarta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/vendor/leaflet-draw/leaflet.draw.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="FloodLens">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5c2.2-1.8 4.2-1.8 6.4 0s4.2 1.8 6.4 0 4.2-1.8 6.2 0"/><path d="M4.5 12.5c2-1.6 3.8-1.6 5.8 0s3.8 1.6 5.8 0 3.8-1.6 5.4 0"/><path d="m12 3.5 3 4.7a3.2 3.2 0 1 1-6 0l3-4.7Z"/></svg>
+        </div>
+        <div><div class="brand-title">FloodLens</div><div class="brand-subtitle">Peta akses kesehatan · Jakarta Pusat</div></div>
+      </div>
+      <div class="topbar-right">
+        <span class="project-tag">ATLAS AKSES / JAKARTA</span>
+        <span class="connection-status" aria-live="polite"><i class="status-dot" id="statusDot"></i><span id="connectionText">Menunggu data terbuka</span></span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Panel kendali simulasi">
+        <div class="sidebar-content">
+          <div class="eyebrow">Jakarta Pusat / atlas akses</div>
+          <h1>Kalau jalan terendam,<br>siapa yang kehilangan akses?</h1>
+          <p class="intro">Gambar area skenario di atas peta risiko banjir. FloodLens menghitung ulang rute jalan menuju rumah sakit dan klinik di sekitarnya.</p>
+
+          <div class="divider"></div>
+          <section aria-labelledby="dataHeading">
+            <div class="section-heading"><h2 id="dataHeading">Basis data</h2></div>
+            <div class="source-card">
+              <div class="source-top"><div class="source-name"><span class="source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 20 7.5v9L12 21l-8-4.5v-9L12 3.2Z"/><path d="m4.5 7.8 7.5 4.1 7.5-4.1M12 12v8.5M8 5.4l8 4.4"/></svg></span><div><div class="source-title">InaRISK · BNPB</div><div class="source-subtitle">Layer bahaya banjir Jabodetabekpunjur</div></div></div><span class="source-state" id="bnpbState">MEMUAT</span></div>
+            </div>
+            <div class="source-card">
+              <div class="source-top"><div class="source-name"><span class="source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8l8-4 8 4v12"/><path d="M8 20v-6h8v6M8 9h.01M12 9h.01M16 9h.01"/><path d="M2 20h20"/></svg></span><div><div class="source-title">OpenStreetMap</div><div class="source-subtitle" id="osmSummary">Jalan & fasilitas kesehatan</div></div></div><span class="source-state" id="osmState">BELUM DIMUAT</span></div>
+            </div>
+            <button class="primary-button" id="loadButton" type="button" aria-label="Muat data jalan dan fasilitas kesehatan Jakarta">
+              <span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6.4L20 12M4 12l2 5.6A7 7 0 0 0 17.9 15"/></svg></span>
+              <span id="loadButtonText">Muat data live Jakarta</span>
+            </button>
+            <p class="helper">Mengambil jaringan jalan dan lokasi fasilitas kesehatan terbaru dari OpenStreetMap. <strong>Butuh koneksi internet.</strong></p>
+          </section>
+
+          <div class="divider"></div>
+          <section aria-labelledby="scenarioHeading">
+            <div class="section-heading"><h2 id="scenarioHeading">Skenario di peta</h2></div>
+            <div class="layer-row">
+              <label for="hazardToggle"><span class="layer-swatch" aria-hidden="true"></span>Tampilkan layer bahaya banjir</label>
+              <input class="switch" id="hazardToggle" type="checkbox" checked aria-label="Tampilkan layer bahaya banjir BNPB">
+            </div>
+            <p class="helper">Gunakan layer BNPB sebagai referensi visual, lalu gambar zona jalan yang diasumsikan tidak dapat dilewati.</p>
+            <div class="control-gap"></div>
+            <div class="origin-box">
+              <span class="origin-indicator" aria-hidden="true"></span>
+              <div class="origin-copy"><div class="origin-title">Titik awal perjalanan</div><div class="origin-coordinate" id="originText">-6.2000, 106.8300 · Menteng</div></div>
+              <button class="quiet-button" id="setOriginButton" type="button" aria-label="Pilih titik awal di peta">PILIH PETA</button>
+            </div>
+            <p class="helper">Klik lokasi awal pada peta, lalu gunakan ikon poligon <strong>gambar area banjir</strong> di sisi kiri peta.</p>
+          </section>
+
+          <div class="divider"></div>
+          <section aria-labelledby="impactHeading">
+            <div class="section-heading"><h2 id="impactHeading">Perubahan jangkauan</h2></div>
+            <div class="metrics-grid">
+              <div class="metric-card"><div class="metric-label">Fasilitas terjangkau · awal</div><div class="metric-value" id="beforeCount">—</div><div class="metric-sub" id="beforeSub">Muat data untuk menghitung</div></div>
+              <div class="metric-card"><div class="metric-label">Fasilitas terjangkau · skenario</div><div class="metric-value accent" id="afterCount">—</div><div class="metric-sub" id="afterSub">Gambar zona terdampak</div></div>
+            </div>
+            <div class="distance-ledger">
+              <div><div class="metric-label">RS terdekat · awal</div><div class="metric-value" id="beforeDistance">—</div><div class="metric-sub">Jarak jaringan jalan</div></div>
+              <div><div class="metric-label">RS terdekat · skenario</div><div class="metric-value warning" id="afterDistance">—</div><div class="metric-sub" id="detourSub">Menunggu skenario</div></div>
+            </div>
+            <div class="result-note" id="resultNote" role="status" aria-live="polite">Pilih titik awal lalu gambar zona untuk melihat dampak terhadap akses kesehatan.</div>
+            <div class="facility-list" id="facilityList" aria-label="Fasilitas kesehatan terdekat"></div>
+          </section>
+          <div class="sidebar-footer">Skenario ilustratif untuk analisis portofolio, bukan prediksi genangan atau panduan rute darurat. Jalur dihitung dari data jalan terbuka dan tidak memasukkan kondisi lalu lintas.</div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <div class="content-bar">
+          <div class="content-heading"><h2>Akses fasilitas kesehatan</h2><p id="mapCaption">Jakarta · pilih titik awal pada peta untuk memulai</p></div>
+          <div class="map-actions"><button class="quiet-button" id="clearButton" type="button" aria-label="Hapus zona skenario">HAPUS ZONA</button><button class="quiet-button" id="fitButton" type="button" aria-label="Kembalikan tampilan peta">RESET PETA</button></div>
+        </div>
+        <section class="map-wrap" aria-label="Peta interaktif Jakarta">
+          <div id="map" role="application" aria-label="Peta Jakarta. Klik untuk menentukan titik awal, gambar poligon untuk mensimulasikan area jalan terendam."></div>
+          <div class="map-badge"><span class="map-badge-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c2.4 3.1 5.8 6.2 5.8 10a5.8 5.8 0 1 1-11.6 0c0-3.8 3.4-6.9 5.8-10Z"/><path d="M7 16.2c1.7-.9 3.5-.9 5.2 0s3.4.9 5.1 0"/></svg></span><span><strong>Bahaya banjir · BNPB</strong><small>Layer referensi · Jabodetabekpunjur</small></span></div>
+          <div class="map-error" id="mapError" role="alert"></div>
+          <div class="map-instructions" id="mapInstructions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.3"/></svg><span>Muat data, lalu klik peta untuk memilih titik awal</span></div>
+          <div class="map-legend" aria-label="Legenda peta">
+            <div class="legend-title">Simbol peta</div>
+            <div class="legend-item"><span class="legend-line"></span>Jaringan jalan</div>
+            <div class="legend-item"><span class="legend-line closed"></span>Ruas terdampak skenario</div>
+            <div class="legend-item"><span class="legend-line route"></span>Rute setelah skenario</div>
+            <div class="legend-item"><span class="legend-dot"></span>Rumah sakit / klinik</div>
+            <div class="legend-item"><span class="legend-dot origin"></span>Titik awal</div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/vendor/leaflet-draw/leaflet.draw.js"></script>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
