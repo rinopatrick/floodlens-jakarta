@@ -1,7 +1,17 @@
-    const FLOOD_BOUNDS = [[-6.43, 106.59], [-5.99, 107.10]];
-    const PILOT_BOUNDS = { south: -6.26, west: 106.78, north: -6.14, east: 106.89 };
-    const DEFAULT_ORIGIN = { lat: -6.2000, lon: 106.8300, label: "Menteng" };
-    const MAX_ACCESS_METERS = 5000;
+import {
+  DEFAULT_ORIGIN,
+  FLOOD_BOUNDS,
+  MAX_ACCESS_METERS,
+  PILOT_BOUNDS,
+} from "./config.js";
+import { distanceMeters, formatKm, pointInPolygon } from "./geo.js";
+import {
+  buildGraph,
+  dijkstra,
+  nearestNode,
+  restorePath,
+} from "./graph.js";
+
     const cssTokens = getComputedStyle(document.documentElement);
     const colorToken = (name) => cssTokens.getPropertyValue(name).trim();
     const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
@@ -39,9 +49,7 @@
     map.addControl(drawControl);
 
     let osmData = null;
-    let graph = new Map();
-    let graphNodes = new Map();
-    let segments = [];
+    let graphData = { adjacency: new Map(), nodes: new Map(), segments: [] };
     let facilities = [];
     let origin = { ...DEFAULT_ORIGIN };
     let originMarker = null;
@@ -84,124 +92,10 @@
       node.style.display = "block";
     }
     function hideMapError() { $("mapError").style.display = "none"; }
-    function formatKm(meters) { return `${(meters / 1000).toFixed(1)} km`; }
-    function distanceMeters(a, b) {
-      const r = 6371000;
-      const rad = Math.PI / 180;
-      const dLat = (b.lat - a.lat) * rad;
-      const dLon = (b.lon - a.lon) * rad;
-      const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
-      return 2 * r * Math.asin(Math.sqrt(x));
-    }
-    function addAdjacency(from, to, edge) {
-      if (!graph.has(from)) graph.set(from, []);
-      graph.get(from).push({ to, weight: edge.weight, key: edge.key, segment: edge });
-    }
-    function buildGraph(data) {
-      graph = new Map();
-      graphNodes = new Map();
-      segments = [];
-      for (const road of data.roads) {
-        for (let i = 0; i < road.points.length - 1; i++) {
-          const a = road.points[i], b = road.points[i + 1];
-          if (!a.id || !b.id || a.id === b.id) continue;
-          graphNodes.set(a.id, [a.lat, a.lon]);
-          graphNodes.set(b.id, [b.lat, b.lon]);
-          const edge = {
-            key: `${road.id}:${i}`,
-            from: a.id,
-            to: b.id,
-            weight: distanceMeters(a, b),
-            a: [a.lat, a.lon],
-            b: [b.lat, b.lon],
-            name: road.name,
-            kind: road.kind
-          };
-          segments.push(edge);
-          if (road.oneway === "-1") addAdjacency(b.id, a.id, edge);
-          else {
-            addAdjacency(a.id, b.id, edge);
-            if (!(["yes", "1", "true"].includes(String(road.oneway).toLowerCase()))) addAdjacency(b.id, a.id, edge);
-          }
-        }
-      }
-      return graphNodes.size;
-    }
-    function nearestNode(point) {
-      let best = null, bestDistance = Infinity;
-      for (const [nodeId, candidate] of graphNodes) {
-        const d = distanceMeters(point, { lat: candidate[0], lon: candidate[1] });
-        if (d < bestDistance) { bestDistance = d; best = nodeId; }
-      }
-      return best;
-    }
-    class MinHeap {
-      constructor() { this.items = []; }
-      push(item) {
-        this.items.push(item);
-        let i = this.items.length - 1;
-        while (i > 0) {
-          const p = Math.floor((i - 1) / 2);
-          if (this.items[p].distance <= item.distance) break;
-          this.items[i] = this.items[p]; i = p;
-        }
-        this.items[i] = item;
-      }
-      pop() {
-        if (!this.items.length) return null;
-        const first = this.items[0], last = this.items.pop();
-        if (this.items.length) {
-          let i = 0;
-          while (true) {
-            const left = i * 2 + 1, right = left + 1;
-            if (left >= this.items.length) break;
-            const child = right < this.items.length && this.items[right].distance < this.items[left].distance ? right : left;
-            if (this.items[child].distance >= last.distance) break;
-            this.items[i] = this.items[child]; i = child;
-          }
-          this.items[i] = last;
-        }
-        return first;
-      }
-      get size() { return this.items.length; }
-    }
-    function dijkstra(start, blocked = new Set()) {
-      const distances = new Map([[start, 0]]);
-      const previous = new Map();
-      const heap = new MinHeap();
-      heap.push({ node: start, distance: 0 });
-      while (heap.size) {
-        const current = heap.pop();
-        if (current.distance !== distances.get(current.node)) continue;
-        for (const edge of graph.get(current.node) || []) {
-          if (blocked.has(edge.key)) continue;
-          const nextDistance = current.distance + edge.weight;
-          if (nextDistance < (distances.get(edge.to) ?? Infinity)) {
-            distances.set(edge.to, nextDistance);
-            previous.set(edge.to, { node: current.node, segment: edge.segment });
-            heap.push({ node: edge.to, distance: nextDistance });
-          }
-        }
-      }
-      return { distances, previous };
-    }
-    function restorePath(result, end) {
-      if (!result.distances.has(end)) return [];
-      const coords = [];
-      let node = end;
-      while (node) {
-        const coordinate = graphNodes.get(node);
-        if (coordinate) coords.push(coordinate);
-        const previous = result.previous.get(node);
-        if (!previous) break;
-        node = previous.node;
-      }
-      return coords.reverse();
-    }
     function locateFacilities() {
       facilities = (osmData.facilities || []).map((facility) => ({
         ...facility,
-        nodeId: nearestNode({ lat: facility.lat, lon: facility.lon })
+        nodeId: nearestNode(graphData.nodes, { lat: facility.lat, lon: facility.lon })
       })).filter((facility) => facility.nodeId);
     }
     function drawRoads() {
@@ -264,16 +158,6 @@
       const span = instructions.querySelector("span");
       span.textContent = message;
     }
-    function pointInPolygon(point, ring) {
-      let inside = false;
-      const x = point[1], y = point[0];
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const xi = ring[i].lng, yi = ring[i].lat, xj = ring[j].lng, yj = ring[j].lat;
-        const crosses = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-12) + xi);
-        if (crosses) inside = !inside;
-      }
-      return inside;
-    }
     function currentRing(layer) {
       const points = layer.getLatLngs();
       return Array.isArray(points[0]) ? points[0] : points;
@@ -282,7 +166,7 @@
       if (!layer) return new Set();
       const ring = currentRing(layer);
       const closed = new Set();
-      for (const segment of segments) {
+      for (const segment of graphData.segments) {
         const midpoint = [(segment.a[0] + segment.b[0]) / 2, (segment.a[1] + segment.b[1]) / 2];
         if (pointInPolygon(midpoint, ring)) closed.add(segment.key);
       }
@@ -291,7 +175,7 @@
     function renderClosures(closed) {
       closureLayer.clearLayers();
       let rendered = 0;
-      for (const segment of segments) {
+      for (const segment of graphData.segments) {
         if (!closed.has(segment.key)) continue;
         L.polyline([segment.a, segment.b], { color: colorToken("--coral"), weight: 3.1, opacity: .95, lineCap: "round", interactive: false }).addTo(closureLayer);
         if (++rendered >= 3500) break;
@@ -317,23 +201,23 @@
     }
     function paintPath(result, facility, color, weight, dashArray = null) {
       if (!facility) return;
-      const coords = restorePath(result, facility.nodeId);
+      const coords = restorePath(graphData.nodes, result, facility.nodeId);
       if (coords.length < 2) return;
       L.polyline(coords, { color, weight, opacity: .95, dashArray, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
     }
     function updateAnalysis() {
       routeLayer.clearLayers();
       closureLayer.clearLayers();
-      if (!osmData || !graph.size) return;
-      const start = nearestNode({ lat: origin.lat, lon: origin.lon });
+      if (!osmData || !graphData.adjacency.size) return;
+      const start = nearestNode(graphData.nodes, { lat: origin.lat, lon: origin.lon });
       if (!start) return;
-      const baseline = dijkstra(start);
+      const baseline = dijkstra(graphData.adjacency, start);
       baseAnalysis = baseline;
       const nearestBaseHospital = nearestFacility(baseline, "hospital");
       const nearestBase = nearestFacility(baseline);
       const closed = closedSegmentsFor(activePolygon);
       renderClosures(closed);
-      const scenario = dijkstra(start, closed);
+      const scenario = dijkstra(graphData.adjacency, start, closed);
       const nearestScenarioHospital = nearestFacility(scenario, "hospital");
       const nearestScenario = nearestFacility(scenario);
       const beforeInRange = facilities.filter((f) => (baseline.distances.get(f.nodeId) ?? Infinity) <= MAX_ACCESS_METERS).length;
@@ -369,7 +253,8 @@
       try {
         const payload = await fetchOsmData(refresh);
         osmData = payload;
-        const nodeCount = buildGraph(osmData);
+        graphData = buildGraph(osmData);
+        const nodeCount = graphData.nodes.size;
         locateFacilities();
         drawRoads();
         setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
