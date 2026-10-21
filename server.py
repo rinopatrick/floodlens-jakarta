@@ -4,36 +4,11 @@ from __future__ import annotations
 
 import json
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
-from floodlens.config import EAST, FLOOD_SERVICE, HOST, NORTH, PORT, ROOT, SOUTH, WEST
+from floodlens.config import HOST, PORT, ROOT
+from floodlens.flood import fetch_flood_overlay
 from floodlens.osm import fetch_osm
-
-
-def fetch_flood_overlay() -> bytes:
-    params = urlencode(
-        {
-            "bbox": f"{WEST - 0.05},{SOUTH - 0.05},{EAST + 0.05},{NORTH + 0.05}",
-            "bboxSR": "4326",
-            "imageSR": "4326",
-            "size": "1440,960",
-            "format": "png32",
-            "transparent": "true",
-            "layers": "show:0",
-            "f": "image",
-        }
-    )
-    request = Request(
-        f"{FLOOD_SERVICE}/export?{params}",
-        headers={"User-Agent": "FloodLens/0.1 local portfolio demonstration"},
-    )
-    with urlopen(request, timeout=35) as response:
-        content_type = response.headers.get("Content-Type", "")
-        body = response.read()
-    if "image/" not in content_type or not body.startswith(b"\x89PNG"):
-        raise RuntimeError("BNPB returned an unexpected map image response")
-    return body
 
 
 class Handler(SimpleHTTPRequestHandler):
