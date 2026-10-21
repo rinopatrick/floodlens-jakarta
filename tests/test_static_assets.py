@@ -1,5 +1,4 @@
 import re
-from pathlib import Path
 
 from floodlens.config import PUBLIC_DIR
 

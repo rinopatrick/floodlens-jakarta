@@ -8,14 +8,17 @@ import threading
 import time
 import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from floodlens.config import APP_VERSION, PUBLIC_DIR, Settings, load_settings
 from floodlens.flood import fetch_flood_overlay
-from floodlens.osm import fetch_osm
+from floodlens.osm import fetch_osm, simplify_osm
 
 
 class Handler(SimpleHTTPRequestHandler):
+    fixture_dir: Path | None = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
 
@@ -65,6 +68,15 @@ class Handler(SimpleHTTPRequestHandler):
         }
         print(json.dumps(record, separators=(",", ":")), flush=True)
 
+    def _fixture_bytes(self, name: str) -> bytes:
+        if self.fixture_dir is None:
+            raise RuntimeError("fixture mode is not enabled")
+        path = self.fixture_dir / name
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            raise RuntimeError(f"fixture {name} is unavailable") from exc
+
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
@@ -78,16 +90,25 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if parsed.path == "/api/osm":
                 try:
-                    refresh = "refresh=1" in parsed.query
-                    self.send_bytes(fetch_osm(refresh), "application/json; charset=utf-8")
+                    if self.fixture_dir is not None:
+                        raw = json.loads(self._fixture_bytes("overpass_synthetic.json"))
+                        body = simplify_osm(raw)
+                    else:
+                        refresh = "refresh=1" in parsed.query
+                        body = fetch_osm(refresh)
+                    self.send_bytes(body, "application/json; charset=utf-8")
                 except Exception as exc:  # surfaced as a useful local network message
                     self.send_error_json(str(exc))
                 return
             if parsed.path == "/api/flood":
                 try:
-                    self.send_bytes(
-                        fetch_flood_overlay(), "image/png", "public, max-age=3600"
-                    )
+                    if self.fixture_dir is not None:
+                        body = self._fixture_bytes("flood.png")
+                        if not body.startswith(b"\x89PNG"):
+                            raise RuntimeError("fixture flood.png is not a PNG")
+                    else:
+                        body = fetch_flood_overlay()
+                    self.send_bytes(body, "image/png", "public, max-age=3600")
                 except Exception as exc:
                     self.send_error_json(str(exc))
                 return
@@ -99,6 +120,19 @@ class Handler(SimpleHTTPRequestHandler):
 def serve(settings: Settings) -> None:
     server = ThreadingHTTPServer((settings.host, settings.port), Handler)
     server.daemon_threads = True
+    Handler.fixture_dir = settings.fixture_dir
+    if settings.fixture_dir is not None:
+        print(
+            json.dumps(
+                {
+                    "level": "warning",
+                    "event": "fixture_mode",
+                    "path": str(settings.fixture_dir),
+                },
+                separators=(",", ":"),
+            ),
+            flush=True,
+        )
 
     def stop(_signum, _frame):
         threading.Thread(target=server.shutdown, daemon=True).start()
