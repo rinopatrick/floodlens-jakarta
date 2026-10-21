@@ -1,4 +1,5 @@
-from server import PORT, overpass_query
+from floodlens.config import PORT
+from floodlens.osm import overpass_query
 
 
 def test_server_module_imports():

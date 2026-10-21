@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from server import overpass_query, simplify_osm
+from floodlens.osm import overpass_query, simplify_osm
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "overpass_synthetic.json").read_text(encoding="utf-8")
@@ -55,6 +55,7 @@ def test_facilities_are_deduped_and_classified():
 def test_payload_is_valid_json_with_expected_metadata():
     payload = simplified()
 
+    assert payload["schemaVersion"] == 1
     assert payload["bounds"] == {
         "south": -6.26,
         "west": 106.78,
