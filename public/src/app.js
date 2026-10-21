@@ -15,7 +15,7 @@ import {
 
     const cssTokens = getComputedStyle(document.documentElement);
     const colorToken = (name) => cssTokens.getPropertyValue(name).trim();
-    const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
+    const map = L.map("map", { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
     L.control.zoom({ position: "topright" }).addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false, maxWidth: 100 }).addTo(map);
     if (["127.0.0.1", "localhost"].includes(location.hostname)) {
@@ -26,7 +26,7 @@ import {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
     }).addTo(map);
 
-    const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .45, interactive: false, alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
+    const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .45, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
     hazardOverlay.addTo(map);
     hazardOverlay.on("load", () => setSourceState("bnpbState", "LAYER AKTIF", "ready"));
     hazardOverlay.on("error", () => {
@@ -151,13 +151,19 @@ import {
       originMarker = L.marker([origin.lat, origin.lon], { icon, keyboard: true, title: "Titik awal perjalanan" }).addTo(map);
       originMarker.bindTooltip("Titik awal", { className: "custom-tooltip" });
       $("originText").textContent = `${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)} · ${origin.label}`;
-      $("mapCaption").textContent = `Jakarta · titik awal: ${origin.label}`;
+      $("originLat").value = origin.lat.toFixed(4);
+      $("originLon").value = origin.lon.toFixed(4);
+      const caption = $("mapCaption");
+      if (caption) caption.textContent = `Jakarta · titik awal: ${origin.label}`;
       updateAnalysis();
     }
-    function updateInstructions(message, drawing = false) {
+    function setAppState(state) {
+      $("app").dataset.state = state;
+    }
+    function updateInstructions(title, message, drawing = false) {
       instructions.classList.toggle("is-drawing", drawing);
-      const span = instructions.querySelector("span");
-      span.textContent = message;
+      $("instructionTitle").textContent = title;
+      $("instructionCopy").textContent = message;
     }
     function currentRing(layer) {
       const points = layer.getLatLngs();
@@ -177,8 +183,8 @@ import {
         .filter((item) => Number.isFinite(item.distance))
         .sort((a, b) => a.distance - b.distance)
         .slice(0, 5);
-      if (!sorted.length) return '<div class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</div>';
-      return sorted.map(({ facility, distance }) => `<div class="facility-row"><strong title="${escapeHtml(facility.name)}">${escapeHtml(facility.name)}</strong><span>${formatKm(distance)}</span></div>`).join("");
+      if (!sorted.length) return '<li class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</li>';
+      return sorted.map(({ facility, distance }, index) => `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(facility.name)}">${escapeHtml(facility.name)}</span><span class="facility-distance">${formatKm(distance)}</span></li>`).join("");
     }
     function paintPath(result, facility, color, weight, dashArray = null) {
       if (!facility) return;
@@ -189,7 +195,10 @@ import {
     function updateAnalysis() {
       routeLayer.clearLayers();
       closureLayer.clearLayers();
-      if (!osmData || !graphData.adjacency.size) return;
+      if (!osmData || !graphData.adjacency.size) {
+        setAppState("empty");
+        return;
+      }
       const start = nearestNode(graphData.nodes, { lat: origin.lat, lon: origin.lon });
       if (!start) return;
       const baseline = dijkstra(graphData.adjacency, start);
@@ -213,9 +222,12 @@ import {
       $("afterSub").textContent = activePolygon ? `${summary.afterHospitals} RS · ${summary.afterClinics} klinik` : "Gambar zona terdampak";
       $("beforeDistance").textContent = summary.nearestBaseHospital ? formatKm(summary.nearestBaseHospital.distance) : "—";
       $("afterDistance").textContent = summary.nearestScenarioHospital ? formatKm(summary.nearestScenarioHospital.distance) : "—";
-      $("detourSub").textContent = activePolygon && summary.nearestBaseHospital && summary.nearestScenarioHospital
-        ? `${summary.nearestScenarioHospital.distance >= summary.nearestBaseHospital.distance ? "+" : "−"}${formatKm(Math.abs(summary.nearestScenarioHospital.distance - summary.nearestBaseHospital.distance))} perubahan rute`
-        : "Gambar zona terdampak";
+      const delta = summary.nearestBaseHospital && summary.nearestScenarioHospital
+        ? summary.nearestScenarioHospital.distance - summary.nearestBaseHospital.distance
+        : null;
+      $("detourValue").textContent = delta === null ? "—" : `${delta >= 0 ? "+" : "−"}${Math.abs(Math.round(delta))} m`;
+      $("detourSub").textContent = activePolygon ? "perubahan jarak jaringan" : "Gambar zona terdampak";
+      $("resultTag").textContent = activePolygon ? "HASIL SKENARIO" : "BASELINE";
       $("afterDistance").classList.toggle("warning", Boolean(activePolygon && summary.lost > 0));
       $("resultNote").textContent = !activePolygon
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
@@ -244,12 +256,15 @@ import {
         $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;
         setStatus("Data publik siap digunakan", "live");
         $("loadButtonText").textContent = "Perbarui data live";
-        updateInstructions("Klik peta untuk mengubah titik awal, atau gambar zona terdampak", false);
-        $("mapCaption").textContent = `Jakarta · ${nodeCount.toLocaleString("id-ID")} simpul jalan · ${facilities.length.toLocaleString("id-ID")} fasilitas kesehatan`;
+        setAppState(activePolygon ? "result" : "baseline");
+        updateInstructions("Baseline aktif", "Klik peta untuk mengubah titik awal, atau gambar zona terdampak.", false);
+        const caption = $("mapCaption");
+        if (caption) caption.textContent = `Jakarta · ${nodeCount.toLocaleString("id-ID")} simpul jalan · ${facilities.length.toLocaleString("id-ID")} fasilitas kesehatan`;
         map.fitBounds([[osmData.bounds.south, osmData.bounds.west], [osmData.bounds.north, osmData.bounds.east]], { padding: [16, 16] });
       } catch (error) {
         setSourceState("osmState", "GAGAL DIMUAT", "error");
         setStatus("Data tidak dapat diakses", "");
+        setAppState("error");
         showMapError(`Data jalan gagal dimuat: ${error.message}. Coba muat ulang beberapa saat lagi.`);
         $("loadButtonText").textContent = "Coba muat data lagi";
       } finally {
@@ -260,31 +275,41 @@ import {
     map.on("click", (event) => {
       if (!osmData || drawActive) return;
       setOrigin(event.latlng, "titik pilihan peta");
-      updateInstructions("Titik awal diperbarui · gambar poligon untuk menguji dampak", false);
+      updateInstructions("Titik awal diperbarui", "Gambar poligon untuk menguji dampak akses.", false);
     });
     map.on("draw:drawstart", () => {
       drawActive = true;
-      updateInstructions("Klik beberapa titik, lalu tutup poligon untuk menetapkan area terdampak", true);
+      setAppState("drawing");
+      updateInstructions("Gambar area skenario", "Klik beberapa titik, lalu tutup poligon untuk menetapkan area terdampak.", true);
     });
     map.on("draw:drawstop", () => {
       drawActive = false;
-      updateInstructions("Area skenario diperbarui · klik peta untuk mengganti titik awal", false);
+      setAppState(activePolygon ? "result" : (osmData ? "baseline" : "empty"));
+      updateInstructions(
+        activePolygon ? "Zona skenario aktif" : "Baseline aktif",
+        activePolygon ? "Ruas tertutup saat titik tengahnya berada di dalam poligon." : "Klik peta untuk mengganti titik awal.",
+        false,
+      );
     });
     map.on(L.Draw.Event.CREATED, (event) => {
       scenarioLayers.clearLayers();
       scenarioLayers.addLayer(event.layer);
       activePolygon = event.layer;
       updateAnalysis();
-      updateInstructions("Zona aktif · atur ulang atau gambar kembali untuk mencoba skenario lain", false);
+      setAppState("result");
+      updateInstructions("Zona skenario aktif", "Ruas tertutup saat titik tengahnya berada di dalam poligon.", false);
     });
     map.on(L.Draw.Event.EDITED, () => {
       activePolygon = scenarioLayers.getLayers()[0] || null;
       updateAnalysis();
+      setAppState(activePolygon ? "result" : (osmData ? "baseline" : "empty"));
+      updateInstructions("Zona skenario diperbarui", "Ruas tertutup saat titik tengahnya berada di dalam poligon.", false);
     });
     map.on(L.Draw.Event.DELETED, () => {
       activePolygon = null;
       updateAnalysis();
-      updateInstructions("Zona dihapus · gambar ulang area untuk membandingkan akses", false);
+      setAppState(osmData ? "baseline" : "empty");
+      updateInstructions("Zona dihapus", "Gambar ulang area untuk membandingkan akses.", false);
     });
     map.on("zoomend", () => { if (osmData) drawFacilities(); });
 
@@ -297,11 +322,30 @@ import {
       scenarioLayers.clearLayers();
       activePolygon = null;
       updateAnalysis();
-      updateInstructions("Zona skenario dihapus · gambar poligon untuk memulai", false);
+      setAppState(osmData ? "baseline" : "empty");
+      updateInstructions("Zona skenario dihapus", "Gambar poligon untuk memulai.", false);
     });
     $("fitButton").addEventListener("click", () => map.setView([-6.22, 106.83], 11));
     $("setOriginButton").addEventListener("click", () => {
-      updateInstructions("Klik peta untuk memilih titik awal perjalanan", false);
+      updateInstructions("Pilih titik awal", "Klik peta untuk memilih titik awal perjalanan.", false);
       $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    $("applyButton").addEventListener("click", () => {
+      if (osmData) {
+        updateAnalysis();
+        setAppState(activePolygon ? "result" : "baseline");
+      }
+      $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    document.querySelectorAll("[data-panel-target]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.panelTarget;
+        $("panelBody").dataset.activePanel = target;
+        document.querySelectorAll("[data-panel-target]").forEach((candidate) => {
+          const active = candidate === button;
+          candidate.setAttribute("aria-selected", String(active));
+          candidate.tabIndex = active ? 0 : -1;
+        });
+      });
     });
     map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));
