@@ -71,7 +71,10 @@ def test_osm_endpoint_reports_upstream_failure(monkeypatch):
     assert response.status == 502
     assert response.getheader("Content-Type") == "application/json; charset=utf-8"
     assert json.loads(body) == {
-        "error": "OpenStreetMap data could not be fetched: offline"
+        "error": {
+            "code": "upstream_unavailable",
+            "message": "OpenStreetMap data could not be fetched: offline",
+        }
     }
 
 
@@ -98,4 +101,4 @@ def test_flood_endpoint_reports_upstream_failure(monkeypatch):
         response, body = get(port, "/api/flood")
 
     assert response.status == 502
-    assert "unexpected map image" in json.loads(body)["error"]
+    assert "unexpected map image" in json.loads(body)["error"]["message"]

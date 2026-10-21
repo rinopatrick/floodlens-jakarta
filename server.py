@@ -47,8 +47,15 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_error_json(self, message: str, status: int = 502) -> None:
-        body = json.dumps({"error": message}).encode("utf-8")
+    def send_error_json(
+        self,
+        message: str,
+        status: int = 502,
+        code: str = "upstream_unavailable",
+    ) -> None:
+        body = json.dumps(
+            {"error": {"code": code, "message": message}}
+        ).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -98,7 +105,12 @@ class Handler(SimpleHTTPRequestHandler):
                         body = fetch_osm(refresh)
                     self.send_bytes(body, "application/json; charset=utf-8")
                 except Exception as exc:  # surfaced as a useful local network message
-                    self.send_error_json(str(exc))
+                    code = (
+                        "fixture_unavailable"
+                        if self.fixture_dir is not None
+                        else "upstream_unavailable"
+                    )
+                    self.send_error_json(str(exc), code=code)
                 return
             if parsed.path == "/api/flood":
                 try:
@@ -110,7 +122,12 @@ class Handler(SimpleHTTPRequestHandler):
                         body = fetch_flood_overlay()
                     self.send_bytes(body, "image/png", "public, max-age=3600")
                 except Exception as exc:
-                    self.send_error_json(str(exc))
+                    code = (
+                        "fixture_unavailable"
+                        if self.fixture_dir is not None
+                        else "upstream_unavailable"
+                    )
+                    self.send_error_json(str(exc), code=code)
                 return
             super().do_GET()
         finally:
