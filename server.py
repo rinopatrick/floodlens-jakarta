@@ -11,7 +11,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from floodlens.config import APP_VERSION, PUBLIC_DIR, Settings, load_settings
+from floodlens.config import (
+    APP_VERSION,
+    CONTENT_SECURITY_POLICY,
+    PUBLIC_DIR,
+    Settings,
+    load_settings,
+)
 from floodlens.flood import fetch_flood_overlay
 from floodlens.osm import fetch_osm, simplify_osm
 
@@ -30,6 +36,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().send_response(code, message)
 
     def end_headers(self) -> None:
+        self.send_header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
@@ -37,6 +44,15 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Request-ID", getattr(self, "request_id", ""))
+        if not getattr(self, "_cache_control", None):
+            path = urlsplit(self.path).path
+            if path.startswith("/vendor/"):
+                cache = "public, max-age=31536000, immutable"
+            elif path == "/" or path.endswith((".html", ".css", ".js")):
+                cache = "no-cache"
+            else:
+                cache = "no-store"
+            self.send_header("Cache-Control", cache)
         super().end_headers()
 
     def send_bytes(self, body: bytes, content_type: str, cache: str = "no-store") -> None:
@@ -44,6 +60,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
+        self._cache_control = cache
         self.end_headers()
         self.wfile.write(body)
 
@@ -60,6 +77,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._cache_control = "no-store"
         self.end_headers()
         self.wfile.write(body)
 
@@ -87,6 +105,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
+        self._cache_control = None
         parsed = urlsplit(self.path)
         try:
             if parsed.path == "/healthz":

@@ -21,6 +21,16 @@ FLOOD_SERVICE = (
     "layer_bahaya_banjir_JBTBPJ/MapServer"
 )
 
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' https://fonts.googleapis.com; "
+    "font-src https://fonts.gstatic.com; "
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org; "
+    "connect-src 'self'; "
+    "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+)
+
 # The pilot window keeps the first data pull small enough for a local demo.
 SOUTH, WEST, NORTH, EAST = -6.26, 106.78, -6.14, 106.89
 PILOT_BOUNDS = {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST}

@@ -14,8 +14,12 @@ const RING = [
 
 test("scenario closes the bridge and reduces health access", async ({ page }) => {
   const pageErrors = [];
+  const consoleErrors = [];
   const externalRequests = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
   page.on("request", (request) => {
     const url = new URL(request.url());
     const allowed =
@@ -76,5 +80,6 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   );
   await expect(page.locator("#facilityList .facility-row")).toHaveCount(3);
   expect(externalRequests).toEqual([]);
+  expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

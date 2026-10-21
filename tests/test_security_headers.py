@@ -4,6 +4,7 @@ import threading
 from contextlib import contextmanager
 
 import server
+from floodlens.config import CONTENT_SECURITY_POLICY
 
 
 @contextmanager
@@ -51,6 +52,8 @@ def test_security_headers_are_present_on_static_and_api_responses(monkeypatch):
         responses = [get(port, "/")[0], get(port, "/healthz")[0], get(port, "/api/osm")[0]]
 
     for response in responses:
+        assert response.getheader("Content-Security-Policy") == CONTENT_SECURITY_POLICY
+        assert "script-src 'self'" in response.getheader("Content-Security-Policy")
         assert response.getheader("X-Content-Type-Options") == "nosniff"
         assert response.getheader("Referrer-Policy") == "no-referrer"
         assert response.getheader("X-Frame-Options") == "DENY"
@@ -58,6 +61,21 @@ def test_security_headers_are_present_on_static_and_api_responses(monkeypatch):
         assert response.getheader("Cross-Origin-Resource-Policy") == "same-origin"
         assert "geolocation=()" in response.getheader("Permissions-Policy")
         assert response.getheader("X-Request-ID")
+
+
+def test_static_cache_policy(monkeypatch):
+    monkeypatch.setattr(server, "fetch_osm", lambda _refresh=False: b"{}")
+
+    with running_server() as port:
+        index = get(port, "/")[0]
+        stylesheet = get(port, "/styles.css")[0]
+        module = get(port, "/src/app.js")[0]
+        vendor = get(port, "/vendor/leaflet/leaflet.js")[0]
+
+    assert index.getheader("Cache-Control") == "no-cache"
+    assert stylesheet.getheader("Cache-Control") == "no-cache"
+    assert module.getheader("Cache-Control") == "no-cache"
+    assert vendor.getheader("Cache-Control") == "public, max-age=31536000, immutable"
 
 
 def test_access_log_is_json_without_query_string(capsys):
