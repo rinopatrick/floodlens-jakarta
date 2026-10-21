@@ -24,13 +24,13 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
     const url = new URL(request.url());
     const allowed =
       url.origin === "http://127.0.0.1:8767" ||
-      url.hostname.endsWith("tile.openstreetmap.org") ||
+      url.hostname.endsWith("server.arcgisonline.com") ||
       url.hostname === "fonts.googleapis.com" ||
       url.hostname === "fonts.gstatic.com";
     if (!allowed) externalRequests.push(request.url());
   });
 
-  await page.route(/https:\/\/[a-c]\.tile\.openstreetmap\.org\/.*/, (route) =>
+  await page.route(/https:\/\/server\.arcgisonline\.com\/.*/, (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: floodFixture }),
   );
   await page.route("https://fonts.googleapis.com/**", (route) =>

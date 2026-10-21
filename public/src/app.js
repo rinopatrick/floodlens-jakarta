@@ -3,6 +3,7 @@ import {
   FLOOD_BOUNDS,
   MAX_ACCESS_METERS,
   PILOT_BOUNDS,
+  TILE_LAYER,
 } from "./config.js";
 import { distanceMeters, formatKm, pointInPolygon } from "./geo.js";
 import { analyzeScenario, closedSegmentsFor } from "./analysis.js";
@@ -21,9 +22,9 @@ import {
     if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       window.floodlensMap = map;
     }
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+    L.tileLayer(TILE_LAYER.url, {
+      maxZoom: TILE_LAYER.maxZoom,
+      attribution: TILE_LAYER.attribution
     }).addTo(map);
 
     const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .45, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
