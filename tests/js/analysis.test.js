@@ -1,52 +1,20 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   analyzeScenario,
-  closedSegmentsFor,
   nearestFacility,
 } from "../../public/src/analysis.js";
-import {
-  buildGraph,
-  dijkstra,
-  nearestNode,
-} from "../../public/src/graph.js";
-
-const data = JSON.parse(
-  readFileSync(new URL("../fixtures/osm_simplified.json", import.meta.url)),
-);
-const RING = [
-  { lat: -6.1995, lng: 106.8312 },
-  { lat: -6.2005, lng: 106.8312 },
-  { lat: -6.2005, lng: 106.8318 },
-  { lat: -6.1995, lng: 106.8318 },
-];
-
-function scenarioFor() {
-  const graph = buildGraph(data);
-  const facilities = data.facilities.map((facility) => ({
-    ...facility,
-    nodeId: nearestNode(graph.nodes, {
-      lat: facility.lat,
-      lon: facility.lon,
-    }),
-  }));
-  const start = nearestNode(graph.nodes, { lat: -6.2, lon: 106.83 });
-  const baseline = dijkstra(graph.adjacency, start);
-  const closed = closedSegmentsFor(graph.segments, RING);
-  const scenario = dijkstra(graph.adjacency, start, closed);
-  return { graph, facilities, start, baseline, closed, scenario };
-}
+import { makeScenario } from "./scenario-fixture.js";
 
 test("closedSegmentsFor closes only the bridge midpoint", () => {
-  const { closed } = scenarioFor();
+  const { closed } = makeScenario();
 
   assert.deepEqual([...closed], ["102:0"]);
 });
 
 test("analyzeScenario reports the expected access loss", () => {
-  const { facilities, baseline, scenario, closed } = scenarioFor();
+  const { facilities, baseline, scenario, closed } = makeScenario();
   const summary = analyzeScenario({
     facilities,
     baseline,
@@ -75,7 +43,7 @@ test("analyzeScenario reports the expected access loss", () => {
 });
 
 test("nearestFacility filters by kind", () => {
-  const { facilities, scenario } = scenarioFor();
+  const { facilities, scenario } = makeScenario();
 
   assert.equal(
     nearestFacility(facilities, scenario.distances, "hospital").facility.name,
