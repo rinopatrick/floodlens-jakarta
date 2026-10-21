@@ -49,7 +49,11 @@ class Settings:
 
 def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     source = os.environ if environ is None else environ
-    raw_port = source.get("FLOODLENS_PORT", str(PORT))
+    raw_port = (
+        source.get("FLOODLENS_PORT")
+        or source.get("PORT")
+        or str(PORT)
+    )
     try:
         port = int(raw_port)
     except ValueError as exc:

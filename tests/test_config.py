@@ -30,6 +30,12 @@ def test_environment_overrides_host_port_and_fixture():
     assert settings.fixture_dir == Path("tests/fixtures")
 
 
+def test_platform_port_is_used_when_floodlens_port_is_absent():
+    settings = load_settings({"PORT": "9001"})
+
+    assert settings.port == 9001
+
+
 def test_invalid_port_is_rejected():
     with pytest.raises(ValueError, match="integer"):
         load_settings({"FLOODLENS_PORT": "http"})

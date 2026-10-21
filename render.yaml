@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: floodlens
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: FLOODLENS_ENV
+        value: production
+      - key: FLOODLENS_HOST
+        value: 0.0.0.0
