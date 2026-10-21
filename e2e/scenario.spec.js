@@ -55,7 +55,7 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
     .toBeCloseTo(106.8315, 4);
 
   await page.locator(".leaflet-draw-draw-polygon").click();
-  await expect(page.locator("#mapInstructions span")).toContainText(
+  await expect(page.locator("#instructionCopy")).toContainText(
     "Klik beberapa titik",
   );
 
