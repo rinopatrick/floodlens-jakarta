@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import json
 import math
-import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from floodlens.config import EAST, NORTH, OVERPASS_ENDPOINTS, PILOT_BOUNDS, SOUTH, WEST
+from floodlens.cache import TTLCache
+from floodlens.config import (
+    EAST,
+    NORTH,
+    OSM_CACHE_TTL,
+    OVERPASS_ENDPOINTS,
+    PILOT_BOUNDS,
+    SOUTH,
+    WEST,
+)
 
-_osm_cache: tuple[float, bytes] | None = None
+OSM_CACHE: TTLCache[bytes] = TTLCache(OSM_CACHE_TTL)
 
 ALLOWED_ROADS = {
     "motorway",
@@ -145,10 +153,10 @@ def simplify_osm(payload: dict) -> bytes:
 
 
 def fetch_osm(force_refresh: bool = False) -> bytes:
-    global _osm_cache
-    if not force_refresh and _osm_cache and time.time() - _osm_cache[0] < 900:
-        return _osm_cache[1]
+    return OSM_CACHE.get_or_fetch(_fetch_osm_from_upstream, force_refresh)
 
+
+def _fetch_osm_from_upstream() -> bytes:
     body = urlencode({"data": overpass_query()}).encode("utf-8")
     last_error: Exception | None = None
     for endpoint in OVERPASS_ENDPOINTS:
@@ -164,9 +172,7 @@ def fetch_osm(force_refresh: bool = False) -> bytes:
         try:
             with urlopen(request, timeout=75) as response:
                 raw = json.loads(response.read())
-            simplified = simplify_osm(raw)
-            _osm_cache = (time.time(), simplified)
-            return simplified
+            return simplify_osm(raw)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, KeyError) as exc:
             last_error = exc
 

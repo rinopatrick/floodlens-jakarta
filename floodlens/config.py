@@ -19,3 +19,6 @@ FLOOD_SERVICE = (
 # The pilot window keeps the first data pull small enough for a local demo.
 SOUTH, WEST, NORTH, EAST = -6.26, 106.78, -6.14, 106.89
 PILOT_BOUNDS = {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST}
+
+OSM_CACHE_TTL = 900
+FLOOD_CACHE_TTL = 3600
