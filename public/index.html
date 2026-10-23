@@ -137,6 +137,7 @@
               <label class="coordinate-field" for="originLon">BUJUR<input id="originLon" type="text" inputmode="decimal" value="106.8300" title="Ketik bujur lalu Enter"></label>
             </div>
             <p class="origin-line" id="originText">-6.2000, 106.8300 · Menteng</p>
+            <p class="field-error" id="originError" role="alert" hidden></p>
             <div class="scenario-actions">
               <button class="secondary-button" id="setOriginButton" type="button">Pilih peta</button>
               <button class="secondary-button" id="applyButton" type="button">Lihat hasil</button>
@@ -182,6 +183,7 @@
             <div class="facility-heading"><span>Fasilitas terdekat</span><small>jarak skenario</small></div>
             <ol class="facility-list" id="facilityList" aria-label="Fasilitas kesehatan terdekat"></ol>
             <p class="result-note" id="resultNote" role="status" aria-live="polite">Pilih titik awal lalu gambar zona untuk melihat dampak terhadap akses kesehatan.</p>
+            <button class="quiet-button undo-polygon" id="undoPolygon" type="button" hidden>Urungkan zona baru</button>
           </section>
         </div>
         <footer class="inspector-footer">Skenario ilustratif · bukan prediksi banjir atau rute darurat. Ambang 5 km adalah pilihan tampilan, bukan standar akses.</footer>

@@ -541,6 +541,9 @@ h1, h2, h3, p { margin-top: 0; }
 .switch input:focus-visible + .switch-track { outline: 3px solid var(--accent); outline-offset: 3px; }
 .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 7px 0 3px; }
 .coordinate-field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font: 10px var(--mono); letter-spacing: .04em; }
+.coordinate-field input[aria-invalid="true"] { border-color: var(--error); background: #f8ecea; }
+.field-error { margin: 4px 0 0; color: var(--error); font-size: 10px; line-height: 1.35; }
+.field-error[hidden] { display: none; }
 .coordinate-field input { width: 100%; height: 33px; padding: 0 10px; border: var(--line); border-radius: 0; background: var(--bg); color: var(--fg); font: 12px var(--mono); }
 .origin-line { margin: 0 0 7px; color: var(--muted); font: 10px var(--mono); }
 .scenario-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -555,6 +558,8 @@ h1, h2, h3, p { margin-top: 0; }
   font: 10px var(--mono);
 }
 .quiet-button:hover { border-color: var(--border); background: var(--bg); color: var(--fg); }
+.undo-polygon { margin-top: 6px; border-color: var(--border); }
+.undo-polygon[hidden] { display: none; }
 .scenario-rule { display: flex; align-items: flex-start; gap: 8px; margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.35; }
 .rule-symbol { width: 14px; height: 14px; display: grid; place-items: center; flex: none; border: 1px solid var(--border); color: var(--fg); font: 10px var(--mono); }
 
@@ -642,7 +647,7 @@ h1, h2, h3, p { margin-top: 0; }
   .hazard-scale { height: 5px; margin: 4px 0 2px; }
   .scale-labels { font-size: 9px; }
   .legend-bottom { gap: 3px; margin-top: 3px; }
-  .line-keys { display: none; }
+  .line-keys { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 9px; }
   .map-instruction { width: 100%; min-height: 39px; padding: 5px 8px; gap: 7px; font-size: 10px; }
   .instruction-mark { width: 20px; height: 20px; font-size: 10px; }
   .attribution { display: inline; margin-left: 4px; font-size: 9px; }
