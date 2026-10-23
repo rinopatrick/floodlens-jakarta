@@ -8,6 +8,8 @@ from collections.abc import Callable
 
 
 class RateLimiter:
+    MAX_KEYS = 4096
+
     def __init__(
         self,
         limit: int,
@@ -23,6 +25,7 @@ class RateLimiter:
     def allow(self, key: str) -> tuple[bool, int]:
         now = self._clock()
         with self._lock:
+            self._evict(now)
             hits = [stamp for stamp in self._hits.get(key, []) if now - stamp < self._window]
             if len(hits) >= self._limit:
                 self._hits[key] = hits
@@ -32,12 +35,26 @@ class RateLimiter:
             self._hits[key] = hits
             return True, 0
 
+    def _evict(self, now: float) -> None:
+        # shortcut: drop idle client keys so the map cannot grow forever.
+        stale = [
+            key
+            for key, hits in self._hits.items()
+            if not hits or now - hits[-1] >= self._window
+        ]
+        for key in stale:
+            del self._hits[key]
+        while len(self._hits) >= self.MAX_KEYS:
+            self._hits.pop(next(iter(self._hits)))
+
     def clear(self) -> None:
         with self._lock:
             self._hits.clear()
 
 
 class Cooldown:
+    MAX_KEYS = 4096
+
     def __init__(
         self,
         seconds: float,
@@ -55,6 +72,16 @@ class Cooldown:
             if last is not None and now - last < self._seconds:
                 return False, max(1, int(self._seconds - (now - last)))
             self._last[key] = now
+            if len(self._last) > self.MAX_KEYS:
+                cutoff = now - self._seconds
+                stale = [k for k, v in self._last.items() if v < cutoff and k != key]
+                for k in stale:
+                    del self._last[k]
+                while len(self._last) > self.MAX_KEYS:
+                    oldest = min(self._last, key=self._last.get)
+                    if oldest == key:
+                        break
+                    del self._last[oldest]
             return True, 0
 
     def clear(self) -> None:
