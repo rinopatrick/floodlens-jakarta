@@ -65,3 +65,54 @@ def test_payload_is_valid_json_with_expected_metadata():
     }
     assert payload["source"].startswith("© OpenStreetMap contributors")
     assert json.dumps(payload, allow_nan=False)
+
+
+def test_malformed_way_does_not_poison_payload():
+    broken = {
+        "osm3s": {},
+        "elements": [
+            {"type": "node", "id": 1, "lat": -6.2, "lon": 106.83},
+            {
+                "type": "way",
+                "id": 999,
+                "nodes": [1, 2, 3],  # length mismatch on purpose
+                "geometry": [{"lat": -6.2, "lon": 106.83}],
+                "tags": {"highway": "primary"},
+            },
+            {"type": "node", "id": 2, "lat": None, "lon": 106.83},  # bad point
+            {"type": "way", "id": 1000},  # missing fields entirely
+            {
+                "type": "way",
+                "id": 1001,
+                "nodes": [10, 11],
+                "geometry": [
+                    {"lat": -6.2, "lon": 106.83},
+                    {"lat": -6.199, "lon": 106.83},
+                ],
+                "tags": {"highway": "primary"},
+            },
+        ],
+    }
+    payload = json.loads(simplify_osm(broken))
+    assert [road["id"] for road in payload["roads"]] == ["1001"]
+
+
+def test_malformed_facility_points_are_skipped():
+    broken = {
+        "osm3s": {},
+        "elements": [
+            {"type": "node", "id": 1, "lat": -6.2},  # missing lon
+            {
+                "type": "way",
+                "id": 50,
+                "tags": {"amenity": "hospital", "name": "RS Bagus"},
+                "geometry": [
+                    {"lat": -6.2, "lon": 106.83},
+                    {"lon": 106.84},  # missing lat: tolerated
+                ],
+            },
+        ],
+    }
+    payload = json.loads(simplify_osm(broken))
+    assert len(payload["facilities"]) == 1
+    assert payload["facilities"][0]["name"] == "RS Bagus"
