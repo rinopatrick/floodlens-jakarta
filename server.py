@@ -17,7 +17,12 @@ from urllib.parse import urlsplit
 from floodlens.config import (
     APP_VERSION,
     CONTENT_SECURITY_POLICY,
+    EAST,
+    MAX_ACCESS_METERS,
+    NORTH,
     PUBLIC_DIR,
+    SOUTH,
+    WEST,
     Settings,
     load_settings,
 )
@@ -205,6 +210,13 @@ class Handler(SimpleHTTPRequestHandler):
                     {
                         "fixtureMode": self.fixture_dir is not None,
                         "tileProvider": "esri",
+                        "pilotBounds": {
+                            "south": SOUTH,
+                            "west": WEST,
+                            "north": NORTH,
+                            "east": EAST,
+                        },
+                        "maxAccessMeters": MAX_ACCESS_METERS,
                     },
                     separators=(",", ":"),
                 ).encode("utf-8")
@@ -231,12 +243,13 @@ class Handler(SimpleHTTPRequestHandler):
                         refresh = "refresh=1" in parsed.query
                         headers: list[tuple[str, str]] = []
                         if refresh:
-                            allowed, _retry = self.refresh_cooldown.allow(
+                            allowed, retry = self.refresh_cooldown.allow(
                                 self._client_key()
                             )
                             if not allowed:
                                 refresh = False
                                 headers.append(("X-Refresh", "cooldown"))
+                                headers.append(("X-Refresh-Retry-After", str(retry)))
                         body = fetch_osm(refresh)
                         payload = json.loads(body)
                         timestamp = payload.get("dataTimestamp", "")

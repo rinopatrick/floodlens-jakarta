@@ -38,7 +38,10 @@ def test_fixture_config_reports_fixture_mode(monkeypatch):
         response, body = get(port, "/api/config")
 
     assert response.status == 200
-    assert json.loads(body) == {"fixtureMode": True, "tileProvider": "esri"}
+    payload = json.loads(body)
+    assert payload["fixtureMode"] is True
+    assert payload["maxAccessMeters"] == 5000
+    assert payload["pilotBounds"]["south"] == -6.26
 
 
 def test_fixture_osm_never_calls_upstream(monkeypatch):

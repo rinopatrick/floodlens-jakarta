@@ -46,7 +46,16 @@ def test_config_endpoint_reports_live_mode(monkeypatch):
         response, body = get(port, "/api/config")
 
     assert response.status == 200
-    assert json.loads(body) == {"fixtureMode": False, "tileProvider": "esri"}
+    payload = json.loads(body)
+    assert payload["fixtureMode"] is False
+    assert payload["tileProvider"] == "esri"
+    assert payload["pilotBounds"] == {
+        "south": -6.26,
+        "west": 106.78,
+        "north": -6.14,
+        "east": 106.89,
+    }
+    assert payload["maxAccessMeters"] == 5000
 
 
 def test_osm_endpoint_returns_simplified_payload(monkeypatch):
