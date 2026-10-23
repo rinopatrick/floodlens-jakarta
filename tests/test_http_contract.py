@@ -120,7 +120,12 @@ def test_flood_endpoint_reports_upstream_failure(monkeypatch):
 def test_osm_supports_gzip_and_etag(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
     payload = json.dumps(
-        {"schemaVersion": 1, "roads": [{"id": "x" * 2000}], "facilities": []}
+        {
+            "schemaVersion": 1,
+            "dataTimestamp": "2026-10-21T00:00:00Z",
+            "roads": [{"id": "x" * 2000}],
+            "facilities": [],
+        }
     ).encode()
     monkeypatch.setattr(server, "fetch_osm", lambda _refresh=False: payload)
 
@@ -132,6 +137,7 @@ def test_osm_supports_gzip_and_etag(monkeypatch):
     assert first.status == 200
     assert first.getheader("Content-Encoding") == "gzip"
     assert first.getheader("Vary") == "Accept-Encoding"
+    assert first.getheader("X-Data-Timestamp") == "2026-10-21T00:00:00Z"
     assert gzip.decompress(body) == payload
     assert etag
     assert second.status == 304

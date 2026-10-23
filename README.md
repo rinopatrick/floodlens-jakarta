@@ -80,7 +80,7 @@ Production notes:
 - The cache is in-memory and per process. Run a single instance or add a shared cache before scaling horizontally.
 - The server is read-only and stores no user data. It has no authentication. Rate limiting is in-process: 120 API requests per minute per client/path, plus a 30-second refresh cooldown.
 - `/api/osm` is gzip-compressed, sends an ETag, and allows a 60-second browser cache with stale-while-revalidate. The server cache remains 15 minutes.
-- The analysis runs on the browser main thread. Baseline results are cached per snapped origin, but a larger area still needs a Web Worker and a spatial index.
+- Analysis, facility snapping, and pathfinding run in a module Web Worker. Graph construction and road drawing remain on the main thread, with a main-thread fallback if the worker cannot start. Very large areas would still benefit from a spatial index.
 - Map tiles are provided by Esri World Street Map; for a high-traffic or commercial deployment, use a licensed tile provider or self-hosted tiles. Automated tests must stub tile requests, not hit a public tile server.
 - Fonts, Leaflet, and Leaflet.draw are served locally. Only basemap tiles require a third-party provider.
 - Live upstream data changes over time. CI uses fixtures; run a manual live smoke test before a release.
