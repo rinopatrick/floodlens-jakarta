@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
+import os
 import signal
 import threading
 import time
@@ -19,11 +22,15 @@ from floodlens.config import (
     load_settings,
 )
 from floodlens.flood import fetch_flood_overlay
-from floodlens.osm import fetch_osm, simplify_osm
+from floodlens.limits import Cooldown, RateLimiter
+from floodlens.osm import OSM_CACHE, fetch_osm, simplify_osm
 
 
 class Handler(SimpleHTTPRequestHandler):
     fixture_dir: Path | None = None
+    request_slots = threading.BoundedSemaphore(16)
+    api_limiter = RateLimiter(limit=120, window_seconds=60)
+    refresh_cooldown = Cooldown(seconds=30)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
@@ -55,20 +62,56 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", cache)
         super().end_headers()
 
-    def send_bytes(self, body: bytes, content_type: str, cache: str = "no-store") -> None:
+    def send_bytes(
+        self,
+        body: bytes,
+        content_type: str,
+        cache: str = "no-store",
+        *,
+        etag: bool = False,
+        compress: bool = False,
+        extra_headers: tuple[tuple[str, str], ...] = (),
+    ) -> None:
+        etag_value = f'"{hashlib.sha256(body).hexdigest()}"' if etag else None
+        if etag_value and self.headers.get("If-None-Match") == etag_value:
+            self.send_response(304)
+            self.send_header("ETag", etag_value)
+            self.send_header("Cache-Control", cache)
+            self.send_header("Vary", "Accept-Encoding")
+            self._cache_control = cache
+            self.end_headers()
+            return
+
+        encoded = body
+        content_encoding = None
+        if compress and len(body) >= 1024 and "gzip" in self.headers.get(
+            "Accept-Encoding", ""
+        ).lower():
+            encoded = gzip.compress(body, compresslevel=6)
+            content_encoding = "gzip"
+
         self.send_response(200)
         self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(len(encoded)))
         self.send_header("Cache-Control", cache)
+        if etag_value:
+            self.send_header("ETag", etag_value)
+        self.send_header("Vary", "Accept-Encoding")
+        if content_encoding:
+            self.send_header("Content-Encoding", content_encoding)
+        for name, value in extra_headers:
+            if value:
+                self.send_header(name, value)
         self._cache_control = cache
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(encoded)
 
     def send_error_json(
         self,
         message: str,
         status: int = 502,
         code: str = "upstream_unavailable",
+        retry_after: int | None = None,
     ) -> None:
         body = json.dumps(
             {"error": {"code": code, "message": message}}
@@ -77,6 +120,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if retry_after is not None:
+            self.send_header("Retry-After", str(retry_after))
         self._cache_control = "no-store"
         self.end_headers()
         self.wfile.write(body)
@@ -93,6 +138,17 @@ class Handler(SimpleHTTPRequestHandler):
         }
         print(json.dumps(record, separators=(",", ":")), flush=True)
 
+    def _write_error_log(self, path: str, exc: Exception) -> None:
+        record = {
+            "level": "error",
+            "event": "upstream_error",
+            "request_id": self.request_id,
+            "path": path,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+        print(json.dumps(record, separators=(",", ":")), flush=True)
+
     def _fixture_bytes(self, name: str) -> bytes:
         if self.fixture_dir is None:
             raise RuntimeError("fixture mode is not enabled")
@@ -102,12 +158,48 @@ class Handler(SimpleHTTPRequestHandler):
         except OSError as exc:
             raise RuntimeError(f"fixture {name} is unavailable") from exc
 
+    def _client_key(self) -> str:
+        if os.environ.get("FLOODLENS_TRUST_PROXY") == "1":
+            forwarded = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            if forwarded:
+                return forwarded
+        return self.client_address[0]
+
+    def _allow_api(self, path: str) -> bool:
+        client = self._client_key()
+        allowed, retry = self.api_limiter.allow(f"{client}:{path}")
+        if allowed:
+            return True
+        self.send_error_json(
+            "Terlalu banyak permintaan. Coba lagi.",
+            status=429,
+            code="rate_limited",
+            retry_after=retry,
+        )
+        return False
+
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
         self._cache_control = None
         parsed = urlsplit(self.path)
+
+        if not self.request_slots.acquire(blocking=False):
+            self.send_error_json(
+                "Server sedang sibuk. Coba lagi.",
+                status=503,
+                code="busy",
+                retry_after=2,
+            )
+            self._write_access_log(parsed.path, started)
+            return
+
         try:
+            if parsed.path in {"/api/osm", "/api/flood"} and not self._allow_api(
+                parsed.path
+            ):
+                return
+
             if parsed.path == "/api/config":
                 body = json.dumps(
                     {
@@ -125,41 +217,93 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_bytes(body, "application/json; charset=utf-8")
                 return
             if parsed.path == "/api/osm":
+                fixture = self.fixture_dir is not None
                 try:
-                    if self.fixture_dir is not None:
+                    if fixture:
                         raw = json.loads(self._fixture_bytes("overpass_synthetic.json"))
                         body = simplify_osm(raw)
+                        self.send_bytes(
+                            body,
+                            "application/json; charset=utf-8",
+                            cache="no-store",
+                        )
                     else:
                         refresh = "refresh=1" in parsed.query
+                        headers: list[tuple[str, str]] = []
+                        if refresh:
+                            allowed, _retry = self.refresh_cooldown.allow(
+                                self._client_key()
+                            )
+                            if not allowed:
+                                refresh = False
+                                headers.append(("X-Refresh", "cooldown"))
                         body = fetch_osm(refresh)
-                    self.send_bytes(body, "application/json; charset=utf-8")
-                except Exception as exc:  # surfaced as a useful local network message
-                    code = (
-                        "fixture_unavailable"
-                        if self.fixture_dir is not None
-                        else "upstream_unavailable"
-                    )
-                    self.send_error_json(str(exc), code=code)
+                        payload = json.loads(body)
+                        timestamp = payload.get("dataTimestamp", "")
+                        if timestamp:
+                            headers.append(("X-Data-Timestamp", str(timestamp)))
+                        age = OSM_CACHE.age()
+                        if age is not None:
+                            headers.append(("X-Data-Age", str(int(age))))
+                        self.send_bytes(
+                            body,
+                            "application/json; charset=utf-8",
+                            cache=(
+                                "no-store"
+                                if refresh
+                                else "public, max-age=60, stale-while-revalidate=300"
+                            ),
+                            etag=not refresh,
+                            compress=True,
+                            extra_headers=tuple(headers),
+                        )
+                except Exception as exc:
+                    self._write_error_log(parsed.path, exc)
+                    if fixture:
+                        self.send_error_json(
+                            "Data contoh tidak tersedia.",
+                            code="fixture_unavailable",
+                        )
+                    else:
+                        self.send_error_json(
+                            "Sumber data OpenStreetMap tidak tersedia. Coba lagi beberapa saat.",
+                            code="upstream_unavailable",
+                            retry_after=5,
+                        )
                 return
             if parsed.path == "/api/flood":
+                fixture = self.fixture_dir is not None
                 try:
-                    if self.fixture_dir is not None:
+                    if fixture:
                         body = self._fixture_bytes("flood.png")
                         if not body.startswith(b"\x89PNG"):
                             raise RuntimeError("fixture flood.png is not a PNG")
                     else:
                         body = fetch_flood_overlay()
-                    self.send_bytes(body, "image/png", "public, max-age=3600")
-                except Exception as exc:
-                    code = (
-                        "fixture_unavailable"
-                        if self.fixture_dir is not None
-                        else "upstream_unavailable"
+                    self.send_bytes(
+                        body,
+                        "image/png",
+                        "public, max-age=3600",
+                        etag=True,
                     )
-                    self.send_error_json(str(exc), code=code)
+                except Exception as exc:
+                    self._write_error_log(parsed.path, exc)
+                    if fixture:
+                        self.send_error_json(
+                            "Data contoh tidak tersedia.",
+                            code="fixture_unavailable",
+                        )
+                    else:
+                        self.send_error_json(
+                            "Layer BNPB tidak tersedia. "
+                            "Peta dasar dan analisis jalan tetap bisa digunakan.",
+                            code="upstream_unavailable",
+                            retry_after=5,
+                        )
                 return
             super().do_GET()
         finally:
+            self.request_slots.release()
             self._write_access_log(parsed.path, started)
 
 

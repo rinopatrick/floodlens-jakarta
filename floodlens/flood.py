@@ -6,7 +6,15 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from floodlens.cache import TTLCache
-from floodlens.config import EAST, FLOOD_CACHE_TTL, FLOOD_SERVICE, NORTH, SOUTH, WEST
+from floodlens.config import (
+    CONTACT_URL,
+    EAST,
+    FLOOD_CACHE_TTL,
+    FLOOD_SERVICE,
+    NORTH,
+    SOUTH,
+    WEST,
+)
 
 FLOOD_CACHE: TTLCache[bytes] = TTLCache(FLOOD_CACHE_TTL)
 
@@ -34,7 +42,7 @@ def fetch_flood_overlay(force_refresh: bool = False) -> bytes:
 def _fetch_flood_overlay() -> bytes:
     request = Request(
         flood_overlay_url(),
-        headers={"User-Agent": "FloodLens/0.1 local portfolio demonstration"},
+        headers={"User-Agent": f"FloodLens/0.2 (portfolio demo; +{CONTACT_URL})"},
     )
     with urlopen(request, timeout=35) as response:
         content_type = response.headers.get("Content-Type", "")

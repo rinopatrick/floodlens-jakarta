@@ -5,6 +5,7 @@ import {
   buildGraph,
   dijkstra,
   nearestNode,
+  nearestNodeWithDistance,
   restorePath,
 } from "../../public/src/graph.js";
 
@@ -87,4 +88,14 @@ test("nearestNode snaps a point to the closest graph node", () => {
   assert.equal(nearestNode(nodes, { lat: 0, lon: 0.0011 }), "b");
   assert.equal(nearestNode(nodes, { lat: 0, lon: 0.0029 }), "d");
   assert.equal(nearestNode(new Map(), { lat: 0, lon: 0 }), null);
+});
+
+test("nearestNodeWithDistance reports the snap distance and coordinate", () => {
+  const { nodes } = buildGraph(DATA);
+  const match = nearestNodeWithDistance(nodes, { lat: 0, lon: 0.0011 });
+
+  assert.equal(match.nodeId, "b");
+  assert.ok(match.distance > 0);
+  assert.deepEqual(match.coord, [0, 0.001]);
+  assert.equal(nearestNodeWithDistance(new Map(), { lat: 0, lon: 0 }), null);
 });

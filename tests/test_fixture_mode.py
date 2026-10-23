@@ -80,9 +80,7 @@ def test_missing_fixture_returns_clear_error(monkeypatch, tmp_path):
         response, body = get(port, "/api/osm")
 
     assert response.status == 502
-    assert "fixture overpass_synthetic.json is unavailable" in json.loads(body)["error"][
-        "message"
-    ]
+    assert json.loads(body)["error"]["message"] == "Data contoh tidak tersedia."
 
 
 def test_fixture_mode_is_off_by_default(monkeypatch):

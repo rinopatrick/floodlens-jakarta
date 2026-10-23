@@ -10,7 +10,7 @@ import { analyzeScenario, closedSegmentsFor } from "./analysis.js";
 import {
   buildGraph,
   dijkstra,
-  nearestNode,
+  nearestNodeWithDistance,
   restorePath,
 } from "./graph.js";
 
@@ -88,6 +88,7 @@ import {
     const facilitiesLayer = L.layerGroup().addTo(map);
     const closureLayer = L.layerGroup().addTo(map);
     const routeLayer = L.layerGroup().addTo(map);
+    const snapLayer = L.layerGroup().addTo(map);
     const scenarioLayers = new L.FeatureGroup().addTo(map);
     const drawControl = new L.Control.Draw({
       position: "topleft",
@@ -98,6 +99,11 @@ import {
       edit: { featureGroup: scenarioLayers, edit: true, remove: true }
     });
     map.addControl(drawControl);
+    document.querySelectorAll(".leaflet-draw-toolbar a").forEach((link) => {
+      link.setAttribute("role", "button");
+      link.setAttribute("tabindex", "0");
+      if (link.title) link.setAttribute("aria-label", link.title);
+    });
 
     let osmData = null;
     let graphData = { adjacency: new Map(), nodes: new Map(), segments: [] };
@@ -106,8 +112,10 @@ import {
     let originMarker = null;
     let activePolygon = null;
     let drawActive = false;
-    let baseAnalysis = null;
+    let originSnap = null;
+    let baselineCache = { key: null, result: null };
     let overlayVisible = true;
+    let activeLoadController = null;
 
     const $ = (id) => document.getElementById(id);
     const loadButton = $("loadButton");
@@ -120,8 +128,15 @@ import {
       node.textContent = text;
       node.className = `source-state ${className}`.trim();
     }
-    async function fetchOsmData(refresh) {
-      const response = await fetch(`/api/osm${refresh ? "?refresh=1" : ""}`, { signal: AbortSignal.timeout(90000) });
+    async function fetchOsmData(refresh, signal) {
+      const timeout = AbortSignal.timeout(90000);
+      const requestSignal = signal && AbortSignal.any
+        ? AbortSignal.any([signal, timeout])
+        : (signal || timeout);
+      const response = await fetch(`/api/osm${refresh ? "?refresh=1" : ""}`, {
+        signal: requestSignal,
+        cache: refresh ? "no-store" : "default",
+      });
       const data = await response.json().catch(() => ({}));
       const error = data.error;
       if (!response.ok || error) {
@@ -143,6 +158,7 @@ import {
       app.dataset.loading = active ? "true" : "false";
       app.setAttribute("aria-busy", String(active));
       $("loadProgress").hidden = !active;
+      $("cancelLoad").hidden = !active;
       if (active) {
         const started = performance.now();
         $("loadProgressText").textContent = "Mengambil data… 0 dtk";
@@ -177,16 +193,20 @@ import {
       }
     }
     function showMapError(message) {
-      const node = $("mapError");
-      node.textContent = message;
-      node.style.display = "block";
+      $("mapErrorText").textContent = message;
+      $("mapError").style.display = "block";
     }
     function hideMapError() { $("mapError").style.display = "none"; }
     function locateFacilities() {
-      facilities = (osmData.facilities || []).map((facility) => ({
-        ...facility,
-        nodeId: nearestNode(graphData.nodes, { lat: facility.lat, lon: facility.lon })
-      })).filter((facility) => facility.nodeId);
+      facilities = (osmData.facilities || []).map((facility) => {
+        const match = nearestNodeWithDistance(graphData.nodes, {
+          lat: facility.lat,
+          lon: facility.lon,
+        });
+        return match
+          ? { ...facility, nodeId: match.nodeId, snapDistance: match.distance }
+          : null;
+      }).filter(Boolean);
     }
     function drawRoads() {
       roadsLayer.clearLayers();
@@ -233,6 +253,33 @@ import {
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
     }
+    function drawSnapIndicator() {
+      snapLayer.clearLayers();
+      if (!originSnap || originSnap.distance < 3) return;
+      L.polyline(
+        [[origin.lat, origin.lon], [originSnap.lat, originSnap.lon]],
+        {
+          color: colorToken("--rust"),
+          weight: 1,
+          opacity: .75,
+          dashArray: "2 5",
+          interactive: false,
+        },
+      ).addTo(snapLayer);
+      L.circleMarker([originSnap.lat, originSnap.lon], {
+        radius: 4,
+        color: colorToken("--rust"),
+        weight: 2,
+        fillColor: colorToken("--surface"),
+        fillOpacity: 1,
+        interactive: false,
+      })
+        .bindTooltip(
+          `Titik analisis · ${Math.round(originSnap.distance)} m dari klik`,
+          { className: "custom-tooltip" },
+        )
+        .addTo(snapLayer);
+    }
     function setOrigin(point, label = "Titik pilihan peta") {
       origin = { lat: point.lat, lon: point.lng ?? point.lon, label };
       if (originMarker) map.removeLayer(originMarker);
@@ -248,6 +295,21 @@ import {
     }
     function setAppState(state) {
       $("app").dataset.state = state;
+      const labels = {
+        empty: "Kosong",
+        baseline: "Baseline",
+        drawing: "Gambar",
+        result: "Hasil",
+        error: "Gagal",
+      };
+      document.querySelectorAll(".state-pill").forEach((pill) => {
+        if (pill.dataset.pill === state) {
+          pill.setAttribute("aria-current", "step");
+        } else {
+          pill.removeAttribute("aria-current");
+        }
+      });
+      $("stateAnnouncement").textContent = `Tahap: ${labels[state] || state}`;
     }
     function updateInstructions(title, message, drawing = false) {
       instructions.classList.toggle("is-drawing", drawing);
@@ -291,7 +353,12 @@ import {
         .sort((a, b) => a.distance - b.distance)
         .slice(0, 5);
       if (!sorted.length) return '<li class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</li>';
-      return sorted.map(({ facility, distance }, index) => `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(facility.name)}">${escapeHtml(facility.name)}</span><span class="facility-distance">${formatKm(distance)}</span></li>`).join("");
+      return sorted.map(({ facility, distance }, index) => {
+        const snap = facility.snapDistance > 500
+          ? ` · snap ${Math.round(facility.snapDistance)} m`
+          : "";
+        return `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(facility.name)}${snap}">${escapeHtml(facility.name)}</span><span class="facility-distance">${formatKm(distance)}</span></li>`;
+      }).join("");
     }
     function paintPath(result, facility, color, weight, dashArray = null) {
       if (!facility) return;
@@ -302,19 +369,35 @@ import {
     function updateAnalysis() {
       routeLayer.clearLayers();
       closureLayer.clearLayers();
+      snapLayer.clearLayers();
       if (!osmData || !graphData.adjacency.size) {
+        originSnap = null;
         setAppState("empty");
         return;
       }
-      const start = nearestNode(graphData.nodes, { lat: origin.lat, lon: origin.lon });
-      if (!start) return;
-      const baseline = dijkstra(graphData.adjacency, start);
-      baseAnalysis = baseline;
+      const snap = nearestNodeWithDistance(graphData.nodes, {
+        lat: origin.lat,
+        lon: origin.lon,
+      });
+      if (!snap) return;
+      originSnap = {
+        lat: snap.coord[0],
+        lon: snap.coord[1],
+        distance: snap.distance,
+      };
+      drawSnapIndicator();
+      if (baselineCache.key !== snap.nodeId) {
+        baselineCache = {
+          key: snap.nodeId,
+          result: dijkstra(graphData.adjacency, snap.nodeId),
+        };
+      }
+      const baseline = baselineCache.result;
       const closed = activePolygon
         ? closedSegmentsFor(graphData.segments, currentRing(activePolygon))
         : new Set();
       renderClosures(closed);
-      const scenario = dijkstra(graphData.adjacency, start, closed);
+      const scenario = dijkstra(graphData.adjacency, snap.nodeId, closed);
       const summary = analyzeScenario({
         facilities,
         baseline,
@@ -334,11 +417,16 @@ import {
         : null;
       $("detourValue").textContent = delta === null ? "—" : `${delta >= 0 ? "+" : "−"}${Math.abs(Math.round(delta))} m`;
       $("detourSub").textContent = activePolygon ? "perubahan jarak jaringan" : "Gambar zona terdampak";
+      $("routeFacilities").textContent = summary.nearestBaseHospital && summary.nearestScenarioHospital
+        ? `${summary.nearestBaseHospital.facility.name} → ${summary.nearestScenarioHospital.facility.name}`
+        : "";
       $("resultTag").textContent = activePolygon ? "HASIL SKENARIO" : "BASELINE";
       $("afterDistance").classList.toggle("warning", Boolean(activePolygon && summary.lost > 0));
-      $("resultNote").textContent = !activePolygon
+      const farSnaps = facilities.filter((facility) => (facility.snapDistance ?? 0) > 500).length;
+      const snapNote = farSnaps ? ` ${farSnaps} fasilitas di-snap lebih dari 500 m.` : "";
+      $("resultNote").textContent = (!activePolygon
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
-        : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`;
+        : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`) + snapNote;
       $("facilityList").innerHTML = facilityRows(scenario);
       paintPath(baseline, summary.nearestBaseHospital, colorToken("--baseline"), 3, "5 7");
       paintPath(scenario, summary.nearestScenarioHospital, colorToken("--teal"), 4);
@@ -351,17 +439,33 @@ import {
       setStatus("Menghubungi Overpass API", "loading");
       setSourceState("osmState", "MENGAMBIL DATA", "");
       hideMapError();
+      activeLoadController = new AbortController();
       setLoading(true);
       try {
-        const payload = await fetchOsmData(refresh);
+        const payload = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
+        baselineCache = { key: null, result: null };
+        originSnap = null;
         const nodeCount = graphData.nodes.size;
         locateFacilities();
         drawRoads();
         setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
         setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, "ready");
         $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;
+        let stamp = "";
+        if (payload.dataTimestamp) {
+          const parsed = new Date(payload.dataTimestamp);
+          if (!Number.isNaN(parsed.getTime())) {
+            stamp = new Intl.DateTimeFormat("id-ID", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(parsed);
+          }
+        }
+        if (stamp) {
+          $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas · ${stamp}`;
+        }
         const fixture = $("app").dataset.fixture === "true";
         setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
         $("loadButtonText").textContent = fixture ? "Perbarui data contoh" : "Perbarui data live";
@@ -371,14 +475,25 @@ import {
         if (caption) caption.textContent = `Jakarta · ${nodeCount.toLocaleString("id-ID")} simpul jalan · ${facilities.length.toLocaleString("id-ID")} fasilitas kesehatan`;
         map.fitBounds([[osmData.bounds.south, osmData.bounds.west], [osmData.bounds.north, osmData.bounds.east]], { padding: [16, 16] });
       } catch (error) {
-        setSourceState("osmState", "GAGAL DIMUAT", "error");
-        setStatus("Data tidak dapat diakses", "");
-        setAppState("error");
-        showMapError(`Data jalan gagal dimuat: ${error.message}. Coba muat ulang beberapa saat lagi.`);
-        $("loadButtonText").textContent = $("app").dataset.fixture === "true" ? "Coba muat data contoh" : "Coba muat data lagi";
+        if (error.name === "AbortError") {
+          setSourceState("osmState", "DIBATALKAN", "");
+          setStatus("Pengambilan data dibatalkan", "");
+          setAppState(osmData ? (activePolygon ? "result" : "baseline") : "empty");
+          hideMapError();
+          $("loadButtonText").textContent = osmData
+            ? ($("app").dataset.fixture === "true" ? "Perbarui data contoh" : "Perbarui data live")
+            : ($("app").dataset.fixture === "true" ? "Muat data contoh" : "Muat data live");
+        } else {
+          setSourceState("osmState", "GAGAL DIMUAT", "error");
+          setStatus("Data tidak dapat diakses", "");
+          setAppState("error");
+          showMapError(`Data jalan gagal dimuat: ${String(error.message).replace(/[.!?]+$/, "")}. Coba muat ulang beberapa saat lagi.`);
+          $("loadButtonText").textContent = $("app").dataset.fixture === "true" ? "Coba muat data contoh" : "Coba muat data lagi";
+        }
       } finally {
         setLoading(false);
         loadButton.disabled = false;
+        activeLoadController = null;
       }
     }
 
@@ -425,6 +540,10 @@ import {
     map.on("zoomend", () => { if (osmData) drawFacilities(); });
 
     loadButton.addEventListener("click", () => loadData(true));
+    $("cancelLoad").addEventListener("click", () => {
+      if (activeLoadController) activeLoadController.abort();
+    });
+    $("retryButton").addEventListener("click", () => loadData(true));
     function applyCoordinateInput() {
       const lat = Number($("originLat").value.replace(",", "."));
       const lon = Number($("originLon").value.replace(",", "."));
@@ -474,6 +593,31 @@ import {
     });
     document.querySelectorAll("[data-panel-target]").forEach((button) => {
       button.addEventListener("click", () => showPanel(button.dataset.panelTarget));
+    });
+    const panelTabs = [...document.querySelectorAll("[data-panel-target]")];
+    panelTabs.forEach((tab, index) => {
+      tab.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? panelTabs.length - 1
+            : (index + (event.key === "ArrowRight" ? 1 : -1) + panelTabs.length) % panelTabs.length;
+        showPanel(panelTabs[next].dataset.panelTarget);
+        panelTabs[next].focus();
+      });
+    });
+    map.getContainer().addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (
+        (event.key === "Enter" || event.key === " ") &&
+        target instanceof Element &&
+        target.matches(".leaflet-draw-toolbar a, .leaflet-draw-actions a")
+      ) {
+        event.preventDefault();
+        target.click();
+      }
     });
     loadRuntimeConfig();
     map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));

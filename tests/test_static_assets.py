@@ -8,6 +8,8 @@ INDEX = (PUBLIC_DIR / "index.html").read_text(encoding="utf-8")
 def test_no_third_party_script_or_style_cdn():
     assert "unpkg.com" not in INDEX
     assert "cdn.jsdelivr.net" not in INDEX
+    assert "fonts.googleapis.com" not in INDEX
+    assert "fonts.gstatic.com" not in INDEX
 
 
 def test_every_local_asset_reference_exists():
@@ -34,3 +36,6 @@ def test_vendor_css_images_exist():
 def test_vendor_licenses_are_present():
     assert (PUBLIC_DIR / "vendor/leaflet/LICENSE").is_file()
     assert (PUBLIC_DIR / "vendor/leaflet-draw/LICENSE.md").is_file()
+    assert (PUBLIC_DIR / "vendor/fonts/OFL-fraunces.txt").is_file()
+    assert (PUBLIC_DIR / "vendor/fonts/OFL-ibmplexsans.txt").is_file()
+    assert (PUBLIC_DIR / "vendor/fonts/OFL-ibmplexmono.txt").is_file()

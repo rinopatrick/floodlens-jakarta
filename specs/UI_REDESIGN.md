@@ -21,13 +21,14 @@ Reference concept: OpenDesign project `floodlens-civic-atlas-redesign` (`floodle
 | `--bg` | `#e9ede7` | Paper / map surround |
 | `--surface` | `#f8f6ef` | Inspector, controls, legend |
 | `--fg` | `#1f373d` | Ink |
-| `--muted` | `#5c7274` | Secondary copy |
+| `--muted` | `#4f6264` | Secondary copy |
+| `--soft` | `#596d6e` | Tertiary labels |
 | `--border` | `#cbd4ca` | Hairline |
-| `--accent` | `#28776f` | Route, primary action, active state |
-| `--rust` | `#b2513c` | Closed segments, hazard, warnings |
+| `--accent` | `#236b63` | Route, primary action, active state |
+| `--rust` | `#9a4331` | Closed segments, hazard, warnings |
 | `--hazard-low/mid/high/max` | green → yellow → orange → red | BNPB reference scale |
 
-Type: Fraunces (display), IBM Plex Sans (body), IBM Plex Mono (labels, coordinates, distances). Spacing follows 4 / 8 / 12 / 16 / 24 / 32. Border radius is zero except circular map markers.
+Type: self-hosted Fraunces (display), IBM Plex Sans (body), IBM Plex Mono (labels, coordinates, distances). Spacing follows 4 / 8 / 12 / 16 / 24 / 32. Border radius is zero except circular map markers.
 
 ## Layout
 
@@ -36,13 +37,13 @@ Desktop:
 - 72px topbar, 44px state strip, then a two-column workspace.
 - Map fills the remaining width; inspector is 380px (350px under 1050px).
 - Map chrome: draw toolbar top-left, zoom top-right, hazard badge, legend bottom-left, instruction bottom-right.
-- Inspector sections remain visible together; the panel scrolls.
+- Inspector sections remain visible together; the panel scrolls. At ≤760px height the inspector switches to Data / Skenario / Dampak tabs.
 
 Mobile (≤720px):
 
 - Map stays above the inspector at 42% viewport height.
 - Inspector becomes a bottom sheet with Data / Skenario / Dampak tabs.
-- Legend and instruction stack at the bottom of the map.
+- Legend and instruction stack at the bottom of the map; the legend is hidden while drawing and in short landscape viewports.
 - Empty state hides the draw toolbar, legend, instruction, and hazard badge so the load action is unambiguous.
 - All controls keep 44px minimum targets.
 
@@ -64,14 +65,15 @@ The state is applied to `#app[data-state]`; the strip reflects the active state.
 - Routes use the existing `--baseline` / `--teal` aliases; closed segments use `--coral` / `--rust`.
 - Facility rows are `<li>` elements with numbered index, name, and scenario distance.
 - The map attribution control is disabled; attribution is kept in the legend and the README.
+- A persistent footer states that the scenario is illustrative, not a flood prediction or emergency route, and that 5 km is a display choice.
 
 ## Verification
 
 ```text
-python -m pytest -q       43 passed
+python -m pytest -q       49 passed
 python -m ruff check .    clean
-npm test                  13 passed
-npx playwright test       1 passed
+npm test                  14 passed
+npx playwright test       4 passed
 ```
 
 E2E fixes the same synthetic bridge scenario: 5 reachable facilities baseline, 3 after closure, nearest hospital 0.3 → 0.6 km, detour +224 m.
