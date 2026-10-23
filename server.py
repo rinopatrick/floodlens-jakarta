@@ -108,6 +108,16 @@ class Handler(SimpleHTTPRequestHandler):
         self._cache_control = None
         parsed = urlsplit(self.path)
         try:
+            if parsed.path == "/api/config":
+                body = json.dumps(
+                    {
+                        "fixtureMode": self.fixture_dir is not None,
+                        "tileProvider": "esri",
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                self.send_bytes(body, "application/json; charset=utf-8")
+                return
             if parsed.path == "/healthz":
                 body = json.dumps(
                     {"status": "ok", "version": APP_VERSION}, separators=(",", ":")

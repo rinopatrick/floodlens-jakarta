@@ -75,7 +75,10 @@ import {
 
     const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .45, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
     hazardOverlay.addTo(map);
-    hazardOverlay.on("load", () => setSourceState("bnpbState", "LAYER AKTIF", "ready"));
+    hazardOverlay.on("load", () => {
+      if ($("app").dataset.fixture === "true") return;
+      setSourceState("bnpbState", "LAYER AKTIF", "ready");
+    });
     hazardOverlay.on("error", () => {
       setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
       showMapError("Layer BNPB tidak dapat dimuat. Peta dasar dan simulasi jaringan tetap bisa digunakan.");
@@ -133,6 +136,45 @@ import {
     function setStatus(text, state = "") {
       connectionText.textContent = text;
       statusDot.className = `status-dot ${state}`.trim();
+    }
+    let loadTimer = null;
+    function setLoading(active) {
+      const app = $("app");
+      app.dataset.loading = active ? "true" : "false";
+      app.setAttribute("aria-busy", String(active));
+      $("loadProgress").hidden = !active;
+      if (active) {
+        const started = performance.now();
+        $("loadProgressText").textContent = "Mengambil data… 0 dtk";
+        clearInterval(loadTimer);
+        loadTimer = setInterval(() => {
+          const seconds = Math.round((performance.now() - started) / 1000);
+          $("loadProgressText").textContent = `Mengambil data… ${seconds} dtk`;
+        }, 1000);
+      } else {
+        clearInterval(loadTimer);
+        loadTimer = null;
+        $("loadProgressText").textContent = "";
+      }
+    }
+    async function loadRuntimeConfig() {
+      try {
+        const response = await fetch("/api/config", { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) return;
+        const config = await response.json();
+        if (!config.fixtureMode) return;
+        $("app").dataset.fixture = "true";
+        $("loadButtonText").textContent = "Muat data contoh";
+        $("sourceNote").textContent = "Mode fixture: snapshot lokal untuk demo dan test. Data live tidak diambil.";
+        setSourceState("bnpbState", "FIXTURE · NONAKTIF", "");
+        $("hazardToggle").checked = false;
+        $("hazardToggle").disabled = true;
+        $("app").dataset.hazard = "off";
+        overlayVisible = false;
+        if (map.hasLayer(hazardOverlay)) map.removeLayer(hazardOverlay);
+      } catch {
+        // Keep the live-data path when the runtime config is unavailable.
+      }
     }
     function showMapError(message) {
       const node = $("mapError");
@@ -221,7 +263,7 @@ import {
       });
     }
     function revealImpact() {
-      if (window.matchMedia("(max-width: 720px)").matches) {
+      if (window.matchMedia("(max-width: 720px), (max-height: 760px)").matches) {
         showPanel("impact");
         $("panelBody").scrollTop = 0;
         return;
@@ -309,6 +351,7 @@ import {
       setStatus("Menghubungi Overpass API", "loading");
       setSourceState("osmState", "MENGAMBIL DATA", "");
       hideMapError();
+      setLoading(true);
       try {
         const payload = await fetchOsmData(refresh);
         osmData = payload;
@@ -319,8 +362,9 @@ import {
         setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
         setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, "ready");
         $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;
-        setStatus("Data publik siap digunakan", "live");
-        $("loadButtonText").textContent = "Perbarui data live";
+        const fixture = $("app").dataset.fixture === "true";
+        setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
+        $("loadButtonText").textContent = fixture ? "Perbarui data contoh" : "Perbarui data live";
         setAppState(activePolygon ? "result" : "baseline");
         updateInstructions("Baseline aktif", "Klik peta untuk mengubah titik awal, atau gambar zona terdampak.", false);
         const caption = $("mapCaption");
@@ -331,8 +375,9 @@ import {
         setStatus("Data tidak dapat diakses", "");
         setAppState("error");
         showMapError(`Data jalan gagal dimuat: ${error.message}. Coba muat ulang beberapa saat lagi.`);
-        $("loadButtonText").textContent = "Coba muat data lagi";
+        $("loadButtonText").textContent = $("app").dataset.fixture === "true" ? "Coba muat data contoh" : "Coba muat data lagi";
       } finally {
+        setLoading(false);
         loadButton.disabled = false;
       }
     }
@@ -402,6 +447,8 @@ import {
     $("originLon").addEventListener("change", applyCoordinateInput);
     $("hazardToggle").addEventListener("change", (event) => {
       overlayVisible = event.target.checked;
+      $("app").dataset.hazard = overlayVisible ? "on" : "off";
+      setSourceState("bnpbState", overlayVisible ? "LAYER AKTIF" : "NONAKTIF", overlayVisible ? "ready" : "");
       if (overlayVisible) hazardOverlay.addTo(map); else map.removeLayer(hazardOverlay);
     });
     $("clearButton").addEventListener("click", () => {
@@ -418,7 +465,7 @@ import {
     });
     $("applyButton").addEventListener("click", () => {
       if (!osmData) {
-        updateInstructions("Muat data dulu", "Klik Muat data live Jakarta untuk menyusun baseline.", false);
+        updateInstructions("Muat data dulu", "Klik Muat data untuk menyusun baseline.", false);
         return;
       }
       updateAnalysis();
@@ -428,4 +475,5 @@ import {
     document.querySelectorAll("[data-panel-target]").forEach((button) => {
       button.addEventListener("click", () => showPanel(button.dataset.panelTarget));
     });
+    loadRuntimeConfig();
     map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));

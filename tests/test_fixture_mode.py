@@ -31,6 +31,16 @@ def get(port, path):
     return response, body
 
 
+def test_fixture_config_reports_fixture_mode(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", FIXTURES)
+
+    with running_server() as port:
+        response, body = get(port, "/api/config")
+
+    assert response.status == 200
+    assert json.loads(body) == {"fixtureMode": True, "tileProvider": "esri"}
+
+
 def test_fixture_osm_never_calls_upstream(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", FIXTURES)
     monkeypatch.setattr(

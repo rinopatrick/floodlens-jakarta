@@ -37,6 +37,16 @@ def test_index_is_served():
     assert b"FloodLens" in body
 
 
+def test_config_endpoint_reports_live_mode(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+
+    with running_server() as port:
+        response, body = get(port, "/api/config")
+
+    assert response.status == 200
+    assert json.loads(body) == {"fixtureMode": False, "tileProvider": "esri"}
+
+
 def test_osm_endpoint_returns_simplified_payload(monkeypatch):
     payload = json.dumps({"schemaVersion": 1, "roads": [], "facilities": []}).encode()
     calls = []

@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="app-window" id="app" data-state="empty">
+  <div class="app-window" id="app" data-state="empty" data-hazard="on">
     <header class="topbar">
       <div class="brand-lockup">
         <span class="brand-mark" aria-hidden="true">
@@ -37,14 +37,14 @@
       <div class="atlas-index"><strong>ATLAS AKSES / JAKARTA</strong><span>Analisis jaringan · radius 5 km</span></div>
     </header>
 
-    <nav class="state-strip" aria-label="Status analisis">
+    <div class="state-strip" role="status" aria-live="polite" aria-label="Tahap analisis">
       <span class="strip-label">Status</span>
-      <span class="state-pill" data-pill="empty"><b>00</b>Kosong</span>
-      <span class="state-pill" data-pill="baseline"><b>01</b>Baseline</span>
-      <span class="state-pill" data-pill="drawing"><b>02</b>Gambar</span>
-      <span class="state-pill" data-pill="result"><b>03</b>Hasil</span>
-      <span class="state-pill" data-pill="error"><b>×</b>Gagal</span>
-    </nav>
+      <span class="state-pill" data-pill="empty"><b>00</b> Kosong</span>
+      <span class="state-pill" data-pill="baseline"><b>01</b> Baseline</span>
+      <span class="state-pill" data-pill="drawing"><b>02</b> Gambar</span>
+      <span class="state-pill" data-pill="result"><b>03</b> Hasil</span>
+      <span class="state-pill" data-pill="error"><b>×</b> Gagal</span>
+    </div>
 
     <main class="workspace">
       <section class="map-region" aria-label="Peta akses kesehatan Jakarta Pusat">
@@ -65,9 +65,12 @@
 
         <div class="map-footer">
           <aside class="map-legend" aria-label="Legenda indeks bahaya banjir BNPB dan jalur skenario">
-            <div class="legend-heading"><span>Indeks bahaya banjir · BNPB</span><span class="legend-date">referensi</span></div>
-            <div class="hazard-scale" aria-hidden="true"></div>
-            <div class="scale-labels" role="img" aria-label="Skala indeks bahaya BNPB dari nol hingga satu"><span>0,0</span><span>0,3</span><span>0,6</span><span>1,0</span></div>
+            <div class="hazard-block">
+              <div class="legend-heading"><span>Indeks bahaya banjir · BNPB</span><span class="legend-date">referensi</span></div>
+              <div class="hazard-scale" aria-hidden="true"></div>
+              <div class="scale-labels" role="img" aria-label="Skala indeks bahaya BNPB dari nol hingga satu"><span>0,0</span><span>0,3</span><span>0,6</span><span>1,0</span></div>
+            </div>
+            <small class="fixture-note">Mode contoh · layer hazard tidak aktif</small>
             <div class="legend-bottom">
               <div class="line-keys">
                 <span class="line-key"><i class="line-swatch baseline" aria-hidden="true"></i>Rute baseline</span>
@@ -112,7 +115,9 @@
             <button class="primary-button" id="loadButton" type="button" aria-label="Muat data jalan dan fasilitas kesehatan Jakarta">
               <span id="loadButtonText">Muat data live Jakarta</span><span class="button-arrow" aria-hidden="true">↗</span>
             </button>
-            <p class="source-note">Mengambil jaringan jalan dan fasilitas kesehatan terbaru dari OpenStreetMap. Butuh koneksi internet.</p>
+            <p class="source-note" id="sourceNote">Mengambil jaringan jalan dan fasilitas kesehatan terbaru dari OpenStreetMap. Butuh koneksi internet.</p>
+            <div class="load-progress" id="loadProgress" role="progressbar" aria-label="Mengambil data OpenStreetMap" hidden><span></span></div>
+            <p class="load-progress-text" id="loadProgressText" aria-live="polite"></p>
           </section>
 
           <section class="panel-section" id="scenario-section" data-panel="scenario" role="tabpanel" aria-labelledby="scenario-title">
