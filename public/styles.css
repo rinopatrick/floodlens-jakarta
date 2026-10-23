@@ -560,6 +560,17 @@ h1, h2, h3, p { margin-top: 0; }
 
 .impact-heading-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .result-tag { color: var(--muted); font: 10px var(--mono); text-align: right; }
+#app[data-analysis="pending"] .result-tag { color: var(--accent); }
+#app[data-analysis="pending"] .result-tag::after {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: analysis-pulse 1s ease-in-out infinite;
+}
+@keyframes analysis-pulse { 50% { opacity: .2; } }
 .count-comparison { display: grid; grid-template-columns: 1fr 24px 1fr; align-items: end; padding: 7px 0 11px; border-bottom: var(--line); }
 .count-side { display: flex; flex-direction: column; gap: 2px; }
 .count-side small { color: var(--muted); font: 10px var(--mono); }

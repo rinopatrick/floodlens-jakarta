@@ -118,6 +118,7 @@ import {
     let activeLoadController = null;
     let analysisWorker = null;
     let analysisRequestId = 0;
+    let hasLoadedData = false;
 
     const $ = (id) => document.getElementById(id);
     const loadButton = $("loadButton");
@@ -299,6 +300,15 @@ import {
       if (caption) caption.textContent = `Jakarta · titik awal: ${origin.label}`;
       updateAnalysis();
     }
+    function setAnalysisPending(pending) {
+      $("app").dataset.analysis = pending ? "pending" : "ready";
+      $("impact-section").setAttribute("aria-busy", String(pending));
+      if (pending) {
+        $("resultTag").textContent = "MENGHITUNG…";
+      } else {
+        $("resultTag").textContent = activePolygon ? "HASIL SKENARIO" : "BASELINE";
+      }
+    }
     function setAppState(state) {
       $("app").dataset.state = state;
       const labels = {
@@ -387,6 +397,7 @@ import {
       }).addTo(routeLayer);
     }
     function renderAnalysis(data) {
+      setAnalysisPending(false);
       routeLayer.clearLayers();
       closureLayer.clearLayers();
       snapLayer.clearLayers();
@@ -424,9 +435,11 @@ import {
       snapLayer.clearLayers();
       if (!osmData || !graphData.adjacency.size) {
         originSnap = null;
+        setAnalysisPending(false);
         setAppState("empty");
         return;
       }
+      setAnalysisPending(true);
       if (facilities.some((facility) => !facility.nodeId)) snapFacilities();
       const snap = nearestNodeWithDistance(graphData.nodes, {
         lat: origin.lat,
@@ -494,6 +507,7 @@ import {
           if (message.type !== "result") return;
           if (message.requestId !== analysisRequestId) return;
           if (message.empty) {
+            setAnalysisPending(false);
             setAppState(osmData ? (activePolygon ? "result" : "baseline") : "empty");
             return;
           }
@@ -529,10 +543,12 @@ import {
         closureLayer.clearLayers();
         snapLayer.clearLayers();
         originSnap = null;
+        setAnalysisPending(false);
         setAppState("empty");
         return;
       }
       if (analysisWorker) {
+        setAnalysisPending(true);
         const requestId = ++analysisRequestId;
         const ring = activePolygon
           ? currentRing(activePolygon).map((point) => ({
@@ -586,6 +602,7 @@ import {
         if (stamp) {
           $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas · ${stamp}`;
         }
+        hasLoadedData = true;
         const fixture = $("app").dataset.fixture === "true";
         setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
         $("loadButtonText").textContent = fixture ? "Perbarui data contoh" : "Perbarui data live";
@@ -604,6 +621,7 @@ import {
             ? ($("app").dataset.fixture === "true" ? "Perbarui data contoh" : "Perbarui data live")
             : ($("app").dataset.fixture === "true" ? "Muat data contoh" : "Muat data live");
         } else {
+          hasLoadedData = false;
           setSourceState("osmState", "GAGAL DIMUAT", "error");
           setStatus("Data tidak dapat diakses", "");
           setAppState("error");
@@ -659,11 +677,11 @@ import {
     });
     map.on("zoomend", () => { if (osmData) drawFacilities(); });
 
-    loadButton.addEventListener("click", () => loadData(true));
+    loadButton.addEventListener("click", () => loadData(hasLoadedData));
     $("cancelLoad").addEventListener("click", () => {
       if (activeLoadController) activeLoadController.abort();
     });
-    $("retryButton").addEventListener("click", () => loadData(true));
+    $("retryButton").addEventListener("click", () => loadData(false));
     function applyCoordinateInput() {
       const lat = Number($("originLat").value.replace(",", "."));
       const lon = Number($("originLon").value.replace(",", "."));

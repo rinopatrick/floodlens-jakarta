@@ -118,7 +118,7 @@ floodlens-jakarta/
 ├── public/
 │   ├── index.html
 │   ├── styles.css
-│   ├── src/            # ES modules: app, API, graph, analysis, geo
+│   ├── src/            # ES modules: app, API, graph, analysis, geo, worker
 │   └── vendor/         # Leaflet, Leaflet.draw, and self-hosted fonts with licenses
 ├── floodlens/
 │   ├── config.py       # environment, bounds, CSP, cache TTLs
