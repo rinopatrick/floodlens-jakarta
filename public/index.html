@@ -70,6 +70,7 @@
             <div class="scale-labels" role="img" aria-label="Skala indeks bahaya BNPB dari nol hingga satu"><span>0,0</span><span>0,3</span><span>0,6</span><span>1,0</span></div>
             <div class="legend-bottom">
               <div class="line-keys">
+                <span class="line-key"><i class="line-swatch baseline" aria-hidden="true"></i>Rute baseline</span>
                 <span class="line-key"><i class="line-swatch" aria-hidden="true"></i>Rute skenario</span>
                 <span class="line-key"><i class="line-swatch closed" aria-hidden="true"></i>Ruas tertutup</span>
               </div>
@@ -121,13 +122,13 @@
               <span class="switch"><input id="hazardToggle" type="checkbox" checked aria-label="Tampilkan layer bahaya banjir BNPB"><span class="switch-track" aria-hidden="true"></span></span>
             </label>
             <div class="coordinates" aria-label="Koordinat titik awal">
-              <label class="coordinate-field" for="originLat">LINTANG<input id="originLat" type="text" value="-6.2000" readonly></label>
-              <label class="coordinate-field" for="originLon">BUJUR<input id="originLon" type="text" value="106.8300" readonly></label>
+              <label class="coordinate-field" for="originLat">LINTANG<input id="originLat" type="text" inputmode="decimal" value="-6.2000" title="Ketik lintang lalu Enter"></label>
+              <label class="coordinate-field" for="originLon">BUJUR<input id="originLon" type="text" inputmode="decimal" value="106.8300" title="Ketik bujur lalu Enter"></label>
             </div>
             <p class="origin-line" id="originText">-6.2000, 106.8300 · Menteng</p>
             <div class="scenario-actions">
               <button class="secondary-button" id="setOriginButton" type="button">Pilih peta</button>
-              <button class="secondary-button" id="applyButton" type="button">Hitung dampak</button>
+              <button class="secondary-button" id="applyButton" type="button">Lihat hasil</button>
             </div>
             <div class="scenario-actions secondary-actions">
               <button class="quiet-button" id="clearButton" type="button">Hapus zona</button>
@@ -166,7 +167,7 @@
                 <span class="metric-sub">jarak jaringan jalan</span>
               </div>
             </div>
-            <div class="facility-heading"><span>5 fasilitas terdekat</span><small>jarak skenario</small></div>
+            <div class="facility-heading"><span>Fasilitas terdekat</span><small>jarak skenario</small></div>
             <ol class="facility-list" id="facilityList" aria-label="Fasilitas kesehatan terdekat"></ol>
             <p class="result-note" id="resultNote" role="status" aria-live="polite">Pilih titik awal lalu gambar zona untuk melihat dampak terhadap akses kesehatan.</p>
           </section>

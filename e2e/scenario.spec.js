@@ -71,7 +71,7 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
     await page.mouse.click(mapBox.x + point.x, mapBox.y + point.y);
     await page.waitForTimeout(350);
   }
-  await page.locator(".leaflet-draw-actions a").filter({ hasText: "Finish" }).click();
+  await page.locator(".leaflet-draw-actions a").filter({ hasText: "Selesai" }).click();
 
   await expect(page.locator("#afterCount")).toHaveText("3");
   await expect(page.locator("#afterDistance")).toHaveText("0.6 km");
