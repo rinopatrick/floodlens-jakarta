@@ -73,7 +73,7 @@ import {
       attribution: TILE_LAYER.attribution
     }).addTo(map);
 
-    const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .45, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
+    const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
     hazardOverlay.addTo(map);
     hazardOverlay.on("load", () => {
       if ($("app").dataset.fixture === "true") return;
@@ -235,7 +235,7 @@ import {
         }
         return;
       }
-      const cellSize = zoom <= 11 ? .04 : zoom === 12 ? .025 : zoom === 13 ? .012 : zoom === 14 ? .006 : .003;
+      const cellSize = zoom <= 11 ? .08 : zoom === 12 ? .05 : zoom === 13 ? .03 : zoom === 14 ? .015 : zoom === 15 ? .008 : .004;
       const clusters = new Map();
       for (const facility of facilities) {
         const key = `${Math.floor(facility.lat / cellSize)}:${Math.floor(facility.lon / cellSize)}`;

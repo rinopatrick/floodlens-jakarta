@@ -193,7 +193,7 @@ h1, h2, h3, p { margin-top: 0; }
 .leaflet-tile-pane {
   filter: grayscale(.34) sepia(.08) saturate(.72) contrast(.96) brightness(1.02);
 }
-.hazard-overlay { mix-blend-mode: multiply; opacity: .32; }
+.hazard-overlay { mix-blend-mode: multiply; opacity: .3; }
 #app[data-state="empty"] .hazard-overlay,
 #app[data-state="error"] .hazard-overlay { display: none; }
 
