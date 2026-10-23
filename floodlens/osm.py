@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -161,7 +162,7 @@ def fetch_osm(force_refresh: bool = False) -> bytes:
 def _fetch_osm_from_upstream() -> bytes:
     body = urlencode({"data": overpass_query()}).encode("utf-8")
     last_error: Exception | None = None
-    for endpoint in OVERPASS_ENDPOINTS:
+    for index, endpoint in enumerate(OVERPASS_ENDPOINTS):
         request = Request(
             endpoint,
             data=body,
@@ -177,5 +178,7 @@ def _fetch_osm_from_upstream() -> bytes:
             return simplify_osm(raw)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, KeyError) as exc:
             last_error = exc
+            if endpoint != OVERPASS_ENDPOINTS[-1]:
+                time.sleep(min(2, 0.5 * (index + 1)))
 
     raise RuntimeError(f"OpenStreetMap data could not be fetched: {last_error}")
