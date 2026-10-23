@@ -77,4 +77,4 @@ npm test                  14 passed
 npx playwright test       5 passed
 ```
 
-E2E fixes the same synthetic bridge scenario: 5 reachable facilities baseline, 3 after closure, nearest hospital 0.3 → 0.6 km, detour +224 m.
+E2E fixes the same synthetic bridge scenario: 5 reachable facilities baseline, 3 after closure, nearest hospital 332 → 556 m, detour +224 m.
