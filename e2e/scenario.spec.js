@@ -12,6 +12,46 @@ const RING = [
   [-6.1995, 106.8318],
 ];
 
+// A ring that overlaps no road midpoint, so it closes nothing.
+const NORTH_RING = [
+  [-6.1986, 106.8308],
+  [-6.1992, 106.8308],
+  [-6.1992, 106.832],
+  [-6.1986, 106.832],
+];
+
+async function loadFixtureMap(page) {
+  await page.route(/https:\/\/server\.arcgisonline\.com\/.*/, (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: floodFixture }),
+  );
+  await page.goto("/");
+  await page.locator("#loadButton").click();
+  await expect(page.locator("#osmState")).toHaveText("10 RUAS");
+  await page.waitForTimeout(1200);
+  await page.evaluate(() =>
+    window.floodlensMap.setView([-6.2, 106.8315], 16, { animate: false }),
+  );
+  await expect
+    .poll(() => page.evaluate(() => window.floodlensMap.getZoom()))
+    .toBe(16);
+}
+
+async function drawPolygon(page, ring) {
+  await page.locator(".leaflet-draw-draw-polygon").click();
+  const mapBox = await page.locator("#map").boundingBox();
+  const points = await page.evaluate((r) => {
+    return r.map(([lat, lng]) => {
+      const point = window.floodlensMap.latLngToContainerPoint([lat, lng]);
+      return { x: point.x, y: point.y };
+    });
+  }, ring);
+  for (const point of points) {
+    await page.mouse.click(mapBox.x + point.x, mapBox.y + point.y);
+    await page.waitForTimeout(350);
+  }
+  await page.locator(".leaflet-draw-actions a").filter({ hasText: "Selesai" }).click();
+}
+
 test("scenario closes the bridge and reduces health access", async ({ page }) => {
   const pageErrors = [];
   const consoleErrors = [];
@@ -24,9 +64,7 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
     const url = new URL(request.url());
     const allowed =
       url.origin === "http://127.0.0.1:8767" ||
-      url.hostname.endsWith("server.arcgisonline.com") ||
-      url.hostname === "fonts.googleapis.com" ||
-      url.hostname === "fonts.gstatic.com";
+      url.hostname.endsWith("server.arcgisonline.com");
     if (!allowed) externalRequests.push(request.url());
   });
 
@@ -40,7 +78,7 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   await expect(page.locator("#osmState")).toHaveText("10 RUAS");
   await expect(page.locator("#beforeCount")).toHaveText("5");
   await expect(page.locator("#afterCount")).toHaveText("5");
-  await expect(page.locator("#beforeDistance")).toHaveText("0.3 km");
+  await expect(page.locator("#beforeDistance")).toHaveText("332 m");
 
   await page.waitForTimeout(1200);
   await page.evaluate(() =>
@@ -71,7 +109,7 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   await page.locator(".leaflet-draw-actions a").filter({ hasText: "Selesai" }).click();
 
   await expect(page.locator("#afterCount")).toHaveText("3");
-  await expect(page.locator("#afterDistance")).toHaveText("0.6 km");
+  await expect(page.locator("#afterDistance")).toHaveText("556 m");
   await expect(page.locator("#resultNote")).toContainText(
     "segmen jalan masuk zona",
   );
@@ -81,6 +119,23 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   expect(pageErrors).toEqual([]);
 });
 
+
+test("a second zone offers a non-blocking undo", async ({ page }) => {
+  await loadFixtureMap(page);
+
+  await drawPolygon(page, RING);
+  await expect(page.locator("#afterCount")).toHaveText("3");
+  await expect(page.locator("#undoPolygon")).toBeHidden();
+
+  // No dialog appears; a new zone replaces the old one and offers undo.
+  await drawPolygon(page, NORTH_RING);
+  await expect(page.locator("#afterCount")).toHaveText("5");
+  await expect(page.locator("#undoPolygon")).toBeVisible();
+
+  await page.locator("#undoPolygon").click();
+  await expect(page.locator("#afterCount")).toHaveText("3");
+  await expect(page.locator("#undoPolygon")).toBeHidden();
+});
 
 test("fixture mode is labelled honestly", async ({ page }) => {
   await page.goto("/");
