@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { distanceMeters, formatKm, pointInPolygon } from "../../public/src/geo.js";
+import { distanceMeters, formatKm, isInsideBounds, pointInPolygon } from "../../public/src/geo.js";
 
 test("distanceMeters matches a known latitude step", () => {
   const distance = distanceMeters(
@@ -12,9 +12,20 @@ test("distanceMeters matches a known latitude step", () => {
   assert.ok(Math.abs(distance - 111.19) < 0.5, String(distance));
 });
 
-test("formatKm uses one decimal place", () => {
-  assert.equal(formatKm(331.8), "0.3 km");
-  assert.equal(formatKm(556), "0.6 km");
+test("formatKm uses meters under 1 km and km above", () => {
+  assert.equal(formatKm(56), "56 m");
+  assert.equal(formatKm(331.8), "332 m");
+  assert.equal(formatKm(1500), "1.5 km");
+});
+
+test("isInsideBounds rejects clicks outside the pilot box", () => {
+  const bounds = { south: -6.26, west: 106.78, north: -6.14, east: 106.89 };
+
+  assert.equal(isInsideBounds(-6.2, 106.83, bounds), true);
+  assert.equal(isInsideBounds(-6.3, 106.83, bounds), false);
+  assert.equal(isInsideBounds(-6.2, 106.95, bounds), false);
+  assert.equal(isInsideBounds(Number.NaN, 106.83, bounds), false);
+  assert.equal(isInsideBounds(-6.2, 106.83, null), false);
 });
 
 test("pointInPolygon detects inside and outside", () => {
