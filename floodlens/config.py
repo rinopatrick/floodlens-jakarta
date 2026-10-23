@@ -41,6 +41,7 @@ PILOT_BOUNDS = {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST}
 
 OSM_CACHE_TTL = 900
 FLOOD_CACHE_TTL = 3600
+MAX_ACCESS_METERS = 5000
 
 
 @dataclass(frozen=True)
