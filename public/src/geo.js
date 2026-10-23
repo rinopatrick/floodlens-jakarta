@@ -12,7 +12,20 @@ export function distanceMeters(a, b) {
 }
 
 export function formatKm(meters) {
+  if (!Number.isFinite(meters)) return "—";
+  // shortcut: meter precision under 1 km keeps block-level detail readable.
+  if (meters < 1000) return `${Math.round(meters)} m`;
   return `${(meters / 1000).toFixed(1)} km`;
+}
+
+export function isInsideBounds(lat, lon, bounds) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !bounds) return false;
+  return (
+    lat >= bounds.south &&
+    lat <= bounds.north &&
+    lon >= bounds.west &&
+    lon <= bounds.east
+  );
 }
 
 export function pointInPolygon(point, ring) {
