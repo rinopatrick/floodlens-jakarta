@@ -1,18 +1,20 @@
 import {
   DEFAULT_ORIGIN,
   FLOOD_BOUNDS,
-  MAX_ACCESS_METERS,
-  PILOT_BOUNDS,
+  MAX_ACCESS_METERS as MAX_ACCESS_FALLBACK,
+  PILOT_BOUNDS as PILOT_FALLBACK,
   TILE_LAYER,
 } from "./config.js";
-import { distanceMeters, formatKm, pointInPolygon } from "./geo.js";
-import { analyzeScenario, closedSegmentsFor } from "./analysis.js";
-import {
-  buildGraph,
-  dijkstra,
-  nearestNodeWithDistance,
-  restorePath,
-} from "./graph.js";
+import { formatKm, isInsideBounds } from "./geo.js";
+import { closedSegmentsFor } from "./analysis.js";
+import { buildRenderPayload } from "./analysis-payload.js";
+import { buildGraph, dijkstra, nearestNodeWithDistance } from "./graph.js";
+let PILOT_BOUNDS = { ...PILOT_FALLBACK };
+let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
+
+function isInsidePilot(lat, lon) {
+  return isInsideBounds(lat, lon, PILOT_BOUNDS);
+}
 
     const cssTokens = getComputedStyle(document.documentElement);
     const colorToken = (name) => cssTokens.getPropertyValue(name).trim();
@@ -111,6 +113,7 @@ import {
     let origin = { ...DEFAULT_ORIGIN };
     let originMarker = null;
     let activePolygon = null;
+    let replacedPolygon = null;
     let drawActive = false;
     let originSnap = null;
     let baselineCache = { key: null, result: null };
@@ -140,7 +143,12 @@ import {
         signal: requestSignal,
         cache: refresh ? "no-store" : "default",
       });
+      const cooldown = response.headers.get("X-Refresh") === "cooldown";
+      const cooldownWait = response.headers.get("X-Refresh-Retry-After");
       const data = await response.json().catch(() => ({}));
+      if (cooldown && cooldownWait) {
+        setStatus(`Refresh dibatasi, coba lagi dalam ${cooldownWait} dtk`, "");
+      }
       const error = data.error;
       if (!response.ok || error) {
         const message = typeof error === "string" ? error : error?.message || `HTTP ${response.status}`;
@@ -181,6 +189,19 @@ import {
         const response = await fetch("/api/config", { signal: AbortSignal.timeout(5000) });
         if (!response.ok) return;
         const config = await response.json();
+        // Single source of truth: server owns bounds and threshold.
+        if (config.pilotBounds && Number.isFinite(config.pilotBounds.south)) {
+          PILOT_BOUNDS = { ...config.pilotBounds };
+        }
+        if (Number.isFinite(config.maxAccessMeters)) {
+          MAX_ACCESS_METERS = config.maxAccessMeters;
+        }
+        // Re-check an origin picked before the server bounds arrived.
+        if (!isInsidePilot(origin.lat, origin.lon)) {
+          setOrigin({ ...DEFAULT_ORIGIN }, DEFAULT_ORIGIN.label);
+          $("originError").textContent = "Titik awal di luar area pilot; dikembalikan ke Menteng.";
+          $("originError").hidden = false;
+        }
         if (!config.fixtureMode) return;
         $("app").dataset.fixture = "true";
         $("loadButtonText").textContent = "Muat data contoh";
@@ -218,9 +239,11 @@ import {
     function drawRoads() {
       roadsLayer.clearLayers();
       for (const road of osmData.roads) {
-        if (!["motorway", "trunk", "primary", "secondary", "tertiary"].includes(road.kind)) continue;
+        // All routable classes are drawn so routes never float over blank tiles.
+        if (!["motorway", "trunk", "primary", "secondary", "tertiary", "residential", "unclassified"].includes(road.kind)) continue;
+        const minor = !["motorway", "trunk", "primary", "secondary"].includes(road.kind);
         const latlngs = road.points.map((p) => [p.lat, p.lon]);
-        L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : 1.25, opacity: .64, interactive: false }).addTo(roadsLayer);
+        L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : minor ? 0.8 : 1.25, opacity: minor ? .45 : .64, interactive: false }).addTo(roadsLayer);
       }
       drawFacilities();
     }
@@ -251,10 +274,14 @@ import {
           html: `<div class="cluster-bubble ${cluster.hospitals ? "has-hospital" : ""}">${cluster.count}<small>${cluster.hospitals ? `${cluster.hospitals} RS` : "klinik"}</small></div>`,
           iconSize: [38, 42], iconAnchor: [19, 19]
         });
-        L.marker([lat, lon], { icon, keyboard: true, title: `${cluster.count} fasilitas kesehatan` })
-          .bindTooltip(`${cluster.count} fasilitas · ${cluster.hospitals} rumah sakit`, { className: "custom-tooltip" })
-          .on("click", () => map.setView([lat, lon], Math.min(16, map.getZoom() + 2)))
-          .addTo(facilitiesLayer);
+        const marker = L.marker([lat, lon], { icon, keyboard: true, title: `${cluster.count} fasilitas kesehatan` })
+          .bindTooltip(`${cluster.count} fasilitas · ${cluster.hospitals} rumah sakit`, { className: "custom-tooltip" });
+        // Cluster clicks zoom only; they must not move the origin.
+        marker.on("click", (event) => {
+          L.DomEvent.stopPropagation(event);
+          map.setView([lat, lon], Math.min(16, map.getZoom() + 2));
+        });
+        marker.addTo(facilitiesLayer);
       }
     }
     function escapeHtml(value) {
@@ -360,30 +387,28 @@ import {
       for (const segment of graphData.segments) {
         if (!closed.has(segment.key)) continue;
         L.polyline([segment.a, segment.b], { color: colorToken("--coral"), weight: 3.1, opacity: .95, lineCap: "round", interactive: false }).addTo(closureLayer);
-        if (++rendered >= 3500) break;
+        rendered++;
       }
+      // Full render: every closed segment is drawn so the map never
+      // understates the closure count.
+      closureLayer._renderedCount = rendered;
     }
     function facilityRowsFromData(rows) {
       if (!rows.length) {
         return '<li class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</li>';
       }
       return rows.map((row, index) => {
+        const outOfRange = row.distance > MAX_ACCESS_METERS;
         const snap = row.snapDistance > 500
           ? ` · snap ${Math.round(row.snapDistance)} m`
           : "";
-        return `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(row.name)}${snap}">${escapeHtml(row.name)}</span><span class="facility-distance">${formatKm(row.distance)}</span></li>`;
+        const rangeNote = outOfRange ? " · di luar radius 5 km" : "";
+        return `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(row.name)}${snap}${rangeNote}">${escapeHtml(row.name)}</span><span class="facility-distance">${formatKm(row.distance)}</span></li>`;
       }).join("");
     }
-    function topFacilityRows(result) {
-      return facilities
-        .map((facility) => ({
-          name: facility.name,
-          distance: result.distances.get(facility.nodeId),
-          snapDistance: facility.snapDistance,
-        }))
-        .filter((row) => Number.isFinite(row.distance))
-        .sort((a, b) => a.distance - b.distance)
-        .slice(0, 5);
+    function pathsEqual(a, b) {
+      if (!a || !b || a.length !== b.length || a.length < 2) return false;
+      return a.every((coord, i) => coord[0] === b[i][0] && coord[1] === b[i][1]);
     }
     function paintCoords(coords, color, weight, dashArray = null) {
       if (!coords || coords.length < 2) return;
@@ -395,6 +420,16 @@ import {
         lineCap: "round",
         lineJoin: "round",
       }).addTo(routeLayer);
+    }
+    function renderRoutePair(baselinePath, scenarioPath) {
+      if (baselinePath.length >= 2 && pathsEqual(baselinePath, scenarioPath)) {
+        // Identical routes: draw once, label honestly instead of hiding one.
+        paintCoords(scenarioPath, colorToken("--teal"), 4);
+        $("routeFacilities").textContent += " · rute tidak berubah";
+        return;
+      }
+      paintCoords(baselinePath, colorToken("--baseline"), 3, "5 7");
+      paintCoords(scenarioPath, colorToken("--teal"), 4);
     }
     function renderAnalysis(data) {
       setAnalysisPending(false);
@@ -410,7 +445,10 @@ import {
       $("beforeSub").textContent = `${summary.beforeHospitals} RS · ${summary.beforeClinics} klinik`;
       $("afterSub").textContent = activePolygon ? `${summary.afterHospitals} RS · ${summary.afterClinics} klinik` : "Gambar zona terdampak";
       $("beforeDistance").textContent = summary.nearestBaseHospital ? formatKm(summary.nearestBaseHospital.distance) : "—";
-      $("afterDistance").textContent = summary.nearestScenarioHospital ? formatKm(summary.nearestScenarioHospital.distance) : "—";
+      const afterInRange = summary.nearestScenarioHospital && summary.nearestScenarioHospital.distance <= MAX_ACCESS_METERS;
+      $("afterDistance").textContent = summary.nearestScenarioHospital
+        ? formatKm(summary.nearestScenarioHospital.distance) + (afterInRange ? "" : " · di luar radius")
+        : "—";
       const delta = summary.nearestBaseHospital && summary.nearestScenarioHospital
         ? summary.nearestScenarioHospital.distance - summary.nearestBaseHospital.distance
         : null;
@@ -426,8 +464,7 @@ import {
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
         : `${data.closedSize.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`) + snapNote;
       $("facilityList").innerHTML = facilityRowsFromData(data.rows);
-      paintCoords(data.baselinePath, colorToken("--baseline"), 3, "5 7");
-      paintCoords(data.scenarioPath, colorToken("--teal"), 4);
+      renderRoutePair(data.baselinePath, data.scenarioPath);
     }
     function updateAnalysisSync() {
       routeLayer.clearLayers();
@@ -462,38 +499,15 @@ import {
         ? closedSegmentsFor(graphData.segments, currentRing(activePolygon))
         : new Set();
       const scenario = dijkstra(graphData.adjacency, snap.nodeId, closed);
-      const summary = analyzeScenario({
-        facilities,
+      renderAnalysis(buildRenderPayload({
+        snap,
         baseline,
         scenario,
         closed,
-        maxAccessMeters: MAX_ACCESS_METERS,
-      });
-      const base = summary.nearestBaseHospital;
-      const scen = summary.nearestScenarioHospital;
-      renderAnalysis({
-        snap: originSnap,
-        closed: [...closed],
-        closedSize: closed.size,
-        summary: {
-          ...summary,
-          nearestBaseHospital: base
-            ? { name: base.facility.name, distance: base.distance }
-            : null,
-          nearestScenarioHospital: scen
-            ? { name: scen.facility.name, distance: scen.distance }
-            : null,
-        },
-        rows: topFacilityRows(scenario),
-        baselinePath: base
-          ? restorePath(graphData.nodes, baseline, base.facility.nodeId)
-          : [],
-        scenarioPath: scen
-          ? restorePath(graphData.nodes, scenario, scen.facility.nodeId)
-          : [],
-        farSnaps: facilities.filter((facility) => (facility.snapDistance ?? 0) > 500)
-          .length,
-      });
+        facilityList: facilities,
+        nodes: graphData.nodes,
+        maxMeters: MAX_ACCESS_METERS,
+      }));
     }
     function createAnalysisWorker() {
       if (typeof Worker === "undefined") return null;
@@ -575,8 +589,8 @@ import {
       setSourceState("osmState", "MENGAMBIL DATA", "");
       hideMapError();
       activeLoadController = new AbortController();
-      setLoading(true);
       try {
+        setLoading(true);
         const payload = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
@@ -637,6 +651,10 @@ import {
 
     map.on("click", (event) => {
       if (!osmData || drawActive) return;
+      if (!isInsidePilot(event.latlng.lat, event.latlng.lng)) {
+        updateInstructions("Di luar area pilot", "Pilih titik di dalam kotak Jakarta Pusat.", false);
+        return;
+      }
       setOrigin(event.latlng, "titik pilihan peta");
       updateInstructions("Titik awal diperbarui", "Gambar poligon untuk menguji dampak akses.", false);
     });
@@ -655,6 +673,8 @@ import {
       );
     });
     map.on(L.Draw.Event.CREATED, (event) => {
+      replacedPolygon = activePolygon;
+      $("undoPolygon").hidden = !replacedPolygon;
       scenarioLayers.clearLayers();
       scenarioLayers.addLayer(event.layer);
       activePolygon = event.layer;
@@ -671,6 +691,8 @@ import {
     });
     map.on(L.Draw.Event.DELETED, () => {
       activePolygon = null;
+      replacedPolygon = null;
+      $("undoPolygon").hidden = true;
       updateAnalysis();
       setAppState(osmData ? "baseline" : "empty");
       updateInstructions("Zona dihapus", "Gambar ulang area untuk membandingkan akses.", false);
@@ -685,19 +707,19 @@ import {
     function applyCoordinateInput() {
       const lat = Number($("originLat").value.replace(",", "."));
       const lon = Number($("originLon").value.replace(",", "."));
-      const { south, west, north, east } = PILOT_BOUNDS;
-      if (
-        Number.isFinite(lat) &&
-        Number.isFinite(lon) &&
-        lat >= south && lat <= north &&
-        lon >= west && lon <= east
-      ) {
+      if (isInsidePilot(lat, lon)) {
+        $("originError").hidden = true;
+        $("originLat").removeAttribute("aria-invalid");
+        $("originLon").removeAttribute("aria-invalid");
         setOrigin({ lat, lon }, "koordinat manual");
         updateInstructions("Titik awal diperbarui", "Gambar poligon untuk menguji dampak akses.", false);
         return;
       }
-      $("originLat").value = origin.lat.toFixed(4);
-      $("originLon").value = origin.lon.toFixed(4);
+      // Keep the typed values so the user can fix them; explain inline.
+      $("originError").textContent = `Koordinat di luar area pilot (${PILOT_BOUNDS.south.toFixed(2)} s.d. ${PILOT_BOUNDS.north.toFixed(2)}, ${PILOT_BOUNDS.west.toFixed(2)} s.d. ${PILOT_BOUNDS.east.toFixed(2)}).`;
+      $("originError").hidden = false;
+      $("originLat").setAttribute("aria-invalid", "true");
+      $("originLon").setAttribute("aria-invalid", "true");
       setStatus("Koordinat di luar area pilot", "");
     }
     $("originLat").addEventListener("change", applyCoordinateInput);
@@ -711,11 +733,31 @@ import {
     $("clearButton").addEventListener("click", () => {
       scenarioLayers.clearLayers();
       activePolygon = null;
+      replacedPolygon = null;
+      $("undoPolygon").hidden = true;
       updateAnalysis();
       setAppState(osmData ? "baseline" : "empty");
       updateInstructions("Zona skenario dihapus", "Gambar poligon untuk memulai.", false);
     });
-    $("fitButton").addEventListener("click", () => map.setView([-6.22, 106.83], 11));
+    $("undoPolygon").addEventListener("click", () => {
+      if (!replacedPolygon) return;
+      scenarioLayers.clearLayers();
+      scenarioLayers.addLayer(replacedPolygon);
+      activePolygon = replacedPolygon;
+      replacedPolygon = null;
+      $("undoPolygon").hidden = true;
+      updateAnalysis();
+      setAppState("result");
+      updateInstructions("Zona sebelumnya dipulihkan", "Ruas tertutup saat titik tengahnya berada di dalam poligon.", false);
+    });
+    $("fitButton").addEventListener("click", () => {
+      if (osmData?.bounds) {
+        const { south, west, north, east } = osmData.bounds;
+        map.fitBounds([[south, west], [north, east]], { padding: [16, 16] });
+        return;
+      }
+      map.setView([-6.22, 106.83], 11);
+    });
     $("setOriginButton").addEventListener("click", () => {
       updateInstructions("Pilih titik awal", "Klik peta untuk memilih titik awal perjalanan.", false);
       $("map").scrollIntoView({ behavior: "smooth", block: "center" });
