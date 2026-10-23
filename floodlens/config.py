@@ -31,6 +31,7 @@ CONTENT_SECURITY_POLICY = (
     "font-src 'self'; "
     "img-src 'self' data: blob: https://server.arcgisonline.com; "
     "connect-src 'self'; "
+    "worker-src 'self'; "
     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
 )
 

@@ -116,6 +116,8 @@ import {
     let baselineCache = { key: null, result: null };
     let overlayVisible = true;
     let activeLoadController = null;
+    let analysisWorker = null;
+    let analysisRequestId = 0;
 
     const $ = (id) => document.getElementById(id);
     const loadButton = $("loadButton");
@@ -198,7 +200,11 @@ import {
     }
     function hideMapError() { $("mapError").style.display = "none"; }
     function locateFacilities() {
-      facilities = (osmData.facilities || []).map((facility) => {
+      facilities = (osmData.facilities || []).map((facility) => ({ ...facility }));
+    }
+    function snapFacilities() {
+      facilities = facilities.map((facility) => {
+        if (facility.nodeId) return facility;
         const match = nearestNodeWithDistance(graphData.nodes, {
           lat: facility.lat,
           lon: facility.lon,
@@ -347,65 +353,47 @@ import {
         if (++rendered >= 3500) break;
       }
     }
-    function facilityRows(result) {
-      const sorted = facilities.map((facility) => ({ facility, distance: result.distances.get(facility.nodeId) }))
-        .filter((item) => Number.isFinite(item.distance))
-        .sort((a, b) => a.distance - b.distance)
-        .slice(0, 5);
-      if (!sorted.length) return '<li class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</li>';
-      return sorted.map(({ facility, distance }, index) => {
-        const snap = facility.snapDistance > 500
-          ? ` · snap ${Math.round(facility.snapDistance)} m`
+    function facilityRowsFromData(rows) {
+      if (!rows.length) {
+        return '<li class="empty-state">Tidak ada fasilitas yang terhubung pada skenario ini.</li>';
+      }
+      return rows.map((row, index) => {
+        const snap = row.snapDistance > 500
+          ? ` · snap ${Math.round(row.snapDistance)} m`
           : "";
-        return `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(facility.name)}${snap}">${escapeHtml(facility.name)}</span><span class="facility-distance">${formatKm(distance)}</span></li>`;
+        return `<li class="facility-row"><span class="facility-index">${index + 1}</span><span class="facility-name" title="${escapeHtml(row.name)}${snap}">${escapeHtml(row.name)}</span><span class="facility-distance">${formatKm(row.distance)}</span></li>`;
       }).join("");
     }
-    function paintPath(result, facility, color, weight, dashArray = null) {
-      if (!facility) return;
-      const coords = restorePath(graphData.nodes, result, facility.nodeId);
-      if (coords.length < 2) return;
-      L.polyline(coords, { color, weight, opacity: .95, dashArray, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
+    function topFacilityRows(result) {
+      return facilities
+        .map((facility) => ({
+          name: facility.name,
+          distance: result.distances.get(facility.nodeId),
+          snapDistance: facility.snapDistance,
+        }))
+        .filter((row) => Number.isFinite(row.distance))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 5);
     }
-    function updateAnalysis() {
+    function paintCoords(coords, color, weight, dashArray = null) {
+      if (!coords || coords.length < 2) return;
+      L.polyline(coords, {
+        color,
+        weight,
+        opacity: .95,
+        dashArray,
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(routeLayer);
+    }
+    function renderAnalysis(data) {
       routeLayer.clearLayers();
       closureLayer.clearLayers();
       snapLayer.clearLayers();
-      if (!osmData || !graphData.adjacency.size) {
-        originSnap = null;
-        setAppState("empty");
-        return;
-      }
-      const snap = nearestNodeWithDistance(graphData.nodes, {
-        lat: origin.lat,
-        lon: origin.lon,
-      });
-      if (!snap) return;
-      originSnap = {
-        lat: snap.coord[0],
-        lon: snap.coord[1],
-        distance: snap.distance,
-      };
+      originSnap = data.snap;
       drawSnapIndicator();
-      if (baselineCache.key !== snap.nodeId) {
-        baselineCache = {
-          key: snap.nodeId,
-          result: dijkstra(graphData.adjacency, snap.nodeId),
-        };
-      }
-      const baseline = baselineCache.result;
-      const closed = activePolygon
-        ? closedSegmentsFor(graphData.segments, currentRing(activePolygon))
-        : new Set();
-      renderClosures(closed);
-      const scenario = dijkstra(graphData.adjacency, snap.nodeId, closed);
-      const summary = analyzeScenario({
-        facilities,
-        baseline,
-        scenario,
-        closed,
-        maxAccessMeters: MAX_ACCESS_METERS,
-      });
-
+      renderClosures(new Set(data.closed));
+      const summary = data.summary;
       $("beforeCount").textContent = String(summary.beforeInRange);
       $("afterCount").textContent = String(summary.afterInRange);
       $("beforeSub").textContent = `${summary.beforeHospitals} RS · ${summary.beforeClinics} klinik`;
@@ -418,18 +406,149 @@ import {
       $("detourValue").textContent = delta === null ? "—" : `${delta >= 0 ? "+" : "−"}${Math.abs(Math.round(delta))} m`;
       $("detourSub").textContent = activePolygon ? "perubahan jarak jaringan" : "Gambar zona terdampak";
       $("routeFacilities").textContent = summary.nearestBaseHospital && summary.nearestScenarioHospital
-        ? `${summary.nearestBaseHospital.facility.name} → ${summary.nearestScenarioHospital.facility.name}`
+        ? `${summary.nearestBaseHospital.name} → ${summary.nearestScenarioHospital.name}`
         : "";
       $("resultTag").textContent = activePolygon ? "HASIL SKENARIO" : "BASELINE";
       $("afterDistance").classList.toggle("warning", Boolean(activePolygon && summary.lost > 0));
-      const farSnaps = facilities.filter((facility) => (facility.snapDistance ?? 0) > 500).length;
-      const snapNote = farSnaps ? ` ${farSnaps} fasilitas di-snap lebih dari 500 m.` : "";
+      const snapNote = data.farSnaps ? ` ${data.farSnaps} fasilitas di-snap lebih dari 500 m.` : "";
       $("resultNote").textContent = (!activePolygon
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
-        : `${closed.size.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`) + snapNote;
-      $("facilityList").innerHTML = facilityRows(scenario);
-      paintPath(baseline, summary.nearestBaseHospital, colorToken("--baseline"), 3, "5 7");
-      paintPath(scenario, summary.nearestScenarioHospital, colorToken("--teal"), 4);
+        : `${data.closedSize.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`) + snapNote;
+      $("facilityList").innerHTML = facilityRowsFromData(data.rows);
+      paintCoords(data.baselinePath, colorToken("--baseline"), 3, "5 7");
+      paintCoords(data.scenarioPath, colorToken("--teal"), 4);
+    }
+    function updateAnalysisSync() {
+      routeLayer.clearLayers();
+      closureLayer.clearLayers();
+      snapLayer.clearLayers();
+      if (!osmData || !graphData.adjacency.size) {
+        originSnap = null;
+        setAppState("empty");
+        return;
+      }
+      if (facilities.some((facility) => !facility.nodeId)) snapFacilities();
+      const snap = nearestNodeWithDistance(graphData.nodes, {
+        lat: origin.lat,
+        lon: origin.lon,
+      });
+      if (!snap) return;
+      originSnap = {
+        lat: snap.coord[0],
+        lon: snap.coord[1],
+        distance: snap.distance,
+      };
+      if (baselineCache.key !== snap.nodeId) {
+        baselineCache = {
+          key: snap.nodeId,
+          result: dijkstra(graphData.adjacency, snap.nodeId),
+        };
+      }
+      const baseline = baselineCache.result;
+      const closed = activePolygon
+        ? closedSegmentsFor(graphData.segments, currentRing(activePolygon))
+        : new Set();
+      const scenario = dijkstra(graphData.adjacency, snap.nodeId, closed);
+      const summary = analyzeScenario({
+        facilities,
+        baseline,
+        scenario,
+        closed,
+        maxAccessMeters: MAX_ACCESS_METERS,
+      });
+      const base = summary.nearestBaseHospital;
+      const scen = summary.nearestScenarioHospital;
+      renderAnalysis({
+        snap: originSnap,
+        closed: [...closed],
+        closedSize: closed.size,
+        summary: {
+          ...summary,
+          nearestBaseHospital: base
+            ? { name: base.facility.name, distance: base.distance }
+            : null,
+          nearestScenarioHospital: scen
+            ? { name: scen.facility.name, distance: scen.distance }
+            : null,
+        },
+        rows: topFacilityRows(scenario),
+        baselinePath: base
+          ? restorePath(graphData.nodes, baseline, base.facility.nodeId)
+          : [],
+        scenarioPath: scen
+          ? restorePath(graphData.nodes, scenario, scen.facility.nodeId)
+          : [],
+        farSnaps: facilities.filter((facility) => (facility.snapDistance ?? 0) > 500)
+          .length,
+      });
+    }
+    function createAnalysisWorker() {
+      if (typeof Worker === "undefined") return null;
+      try {
+        const worker = new Worker(
+          new URL("./analysis-worker.js", import.meta.url),
+          { type: "module" },
+        );
+        worker.onmessage = (event) => {
+          const message = event.data;
+          if (message.type !== "result") return;
+          if (message.requestId !== analysisRequestId) return;
+          if (message.empty) {
+            setAppState(osmData ? (activePolygon ? "result" : "baseline") : "empty");
+            return;
+          }
+          renderAnalysis(message);
+        };
+        worker.onerror = () => {
+          console.warn("Analysis worker failed; using the main thread.");
+          analysisWorker = null;
+          updateAnalysisSync();
+        };
+        return worker;
+      } catch (error) {
+        console.warn("Analysis worker unavailable; using the main thread.", error);
+        return null;
+      }
+    }
+    function setupAnalysisWorker() {
+      if (analysisWorker) analysisWorker.terminate();
+      analysisWorker = createAnalysisWorker();
+      if (analysisWorker) {
+        analysisWorker.postMessage({
+          type: "setup",
+          graph: graphData,
+          facilities,
+          maxAccessMeters: MAX_ACCESS_METERS,
+        });
+      }
+    }
+    function updateAnalysis() {
+      if (!osmData || !graphData.adjacency.size) {
+        analysisRequestId += 1;
+        routeLayer.clearLayers();
+        closureLayer.clearLayers();
+        snapLayer.clearLayers();
+        originSnap = null;
+        setAppState("empty");
+        return;
+      }
+      if (analysisWorker) {
+        const requestId = ++analysisRequestId;
+        const ring = activePolygon
+          ? currentRing(activePolygon).map((point) => ({
+              lat: point.lat,
+              lng: point.lng,
+            }))
+          : null;
+        analysisWorker.postMessage({
+          type: "analyze",
+          requestId,
+          origin: { lat: origin.lat, lon: origin.lon },
+          ring,
+        });
+        return;
+      }
+      updateAnalysisSync();
     }
 
     async function loadData(refresh = false) {
@@ -450,6 +569,7 @@ import {
         const nodeCount = graphData.nodes.size;
         locateFacilities();
         drawRoads();
+        setupAnalysisWorker();
         setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
         setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, "ready");
         $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;

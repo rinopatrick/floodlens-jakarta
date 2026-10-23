@@ -56,6 +56,7 @@ def test_payload_is_valid_json_with_expected_metadata():
     payload = simplified()
 
     assert payload["schemaVersion"] == 1
+    assert payload["dataTimestamp"] == "2026-10-21T00:00:00Z"
     assert payload["bounds"] == {
         "south": -6.26,
         "west": 106.78,
