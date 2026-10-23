@@ -19,6 +19,52 @@ import {
     const map = L.map("map", { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
     L.control.zoom({ position: "topright" }).addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false, maxWidth: 100 }).addTo(map);
+    Object.assign(L.drawLocal.draw.toolbar.actions, {
+      title: "Batal menggambar",
+      text: "Batal"
+    });
+    Object.assign(L.drawLocal.draw.toolbar.finish, {
+      title: "Selesaikan gambar",
+      text: "Selesai"
+    });
+    Object.assign(L.drawLocal.draw.toolbar.undo, {
+      title: "Hapus titik terakhir",
+      text: "Hapus titik"
+    });
+    Object.assign(L.drawLocal.draw.toolbar.buttons, {
+      polyline: "Gambar garis",
+      polygon: "Gambar zona",
+      rectangle: "Gambar persegi",
+      circle: "Gambar lingkaran",
+      marker: "Tandai titik",
+      circlemarker: "Tandai lingkaran"
+    });
+    Object.assign(L.drawLocal.draw.handlers.polygon.tooltip, {
+      start: "Klik untuk mulai menggambar zona.",
+      cont: "Klik untuk melanjutkan.",
+      end: "Klik titik pertama untuk menutup zona."
+    });
+    Object.assign(L.drawLocal.edit.toolbar.actions.save, {
+      title: "Simpan perubahan",
+      text: "Simpan"
+    });
+    Object.assign(L.drawLocal.edit.toolbar.actions.cancel, {
+      title: "Batal mengedit",
+      text: "Batal"
+    });
+    Object.assign(L.drawLocal.edit.toolbar.actions.clearAll, {
+      title: "Hapus semua",
+      text: "Hapus semua"
+    });
+    Object.assign(L.drawLocal.edit.toolbar.buttons, {
+      edit: "Edit zona",
+      editDisabled: "Belum ada zona",
+      remove: "Hapus zona",
+      removeDisabled: "Belum ada zona"
+    });
+    L.drawLocal.edit.handlers.edit.tooltip.text = "Geser titik untuk mengedit zona.";
+    L.drawLocal.edit.handlers.edit.tooltip.subtext = "Klik Batal untuk membatalkan.";
+    L.drawLocal.edit.handlers.remove.tooltip.text = "Klik zona untuk menghapus.";
     if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       window.floodlensMap = map;
     }
@@ -166,6 +212,24 @@ import {
       $("instructionTitle").textContent = title;
       $("instructionCopy").textContent = message;
     }
+    function showPanel(target) {
+      $("panelBody").dataset.activePanel = target;
+      document.querySelectorAll("[data-panel-target]").forEach((candidate) => {
+        const active = candidate.dataset.panelTarget === target;
+        candidate.setAttribute("aria-selected", String(active));
+        candidate.tabIndex = active ? 0 : -1;
+      });
+    }
+    function revealImpact() {
+      if (window.matchMedia("(max-width: 720px)").matches) {
+        showPanel("impact");
+        $("panelBody").scrollTop = 0;
+        return;
+      }
+      const panel = $("panelBody");
+      const impact = $("impact-section");
+      panel.scrollTo({ top: Math.max(0, impact.offsetTop - 8), behavior: "smooth" });
+    }
     function currentRing(layer) {
       const points = layer.getLatLngs();
       return Array.isArray(points[0]) ? points[0] : points;
@@ -299,6 +363,7 @@ import {
       updateAnalysis();
       setAppState("result");
       updateInstructions("Zona skenario aktif", "Ruas tertutup saat titik tengahnya berada di dalam poligon.", false);
+      revealImpact();
     });
     map.on(L.Draw.Event.EDITED, () => {
       activePolygon = scenarioLayers.getLayers()[0] || null;
@@ -315,6 +380,26 @@ import {
     map.on("zoomend", () => { if (osmData) drawFacilities(); });
 
     loadButton.addEventListener("click", () => loadData(true));
+    function applyCoordinateInput() {
+      const lat = Number($("originLat").value.replace(",", "."));
+      const lon = Number($("originLon").value.replace(",", "."));
+      const { south, west, north, east } = PILOT_BOUNDS;
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lon) &&
+        lat >= south && lat <= north &&
+        lon >= west && lon <= east
+      ) {
+        setOrigin({ lat, lon }, "koordinat manual");
+        updateInstructions("Titik awal diperbarui", "Gambar poligon untuk menguji dampak akses.", false);
+        return;
+      }
+      $("originLat").value = origin.lat.toFixed(4);
+      $("originLon").value = origin.lon.toFixed(4);
+      setStatus("Koordinat di luar area pilot", "");
+    }
+    $("originLat").addEventListener("change", applyCoordinateInput);
+    $("originLon").addEventListener("change", applyCoordinateInput);
     $("hazardToggle").addEventListener("change", (event) => {
       overlayVisible = event.target.checked;
       if (overlayVisible) hazardOverlay.addTo(map); else map.removeLayer(hazardOverlay);
@@ -332,21 +417,15 @@ import {
       $("map").scrollIntoView({ behavior: "smooth", block: "center" });
     });
     $("applyButton").addEventListener("click", () => {
-      if (osmData) {
-        updateAnalysis();
-        setAppState(activePolygon ? "result" : "baseline");
+      if (!osmData) {
+        updateInstructions("Muat data dulu", "Klik Muat data live Jakarta untuk menyusun baseline.", false);
+        return;
       }
-      $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+      updateAnalysis();
+      setAppState(activePolygon ? "result" : "baseline");
+      revealImpact();
     });
     document.querySelectorAll("[data-panel-target]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const target = button.dataset.panelTarget;
-        $("panelBody").dataset.activePanel = target;
-        document.querySelectorAll("[data-panel-target]").forEach((candidate) => {
-          const active = candidate === button;
-          candidate.setAttribute("aria-selected", String(active));
-          candidate.tabIndex = active ? 0 : -1;
-        });
-      });
+      button.addEventListener("click", () => showPanel(button.dataset.panelTarget));
     });
     map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));
