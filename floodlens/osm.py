@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 from floodlens.cache import TTLCache
 from floodlens.config import (
+    CONTACT_URL,
     EAST,
     NORTH,
     OSM_CACHE_TTL,
@@ -143,6 +144,7 @@ def simplify_osm(payload: dict) -> bytes:
         {
             "schemaVersion": 1,
             "source": "© OpenStreetMap contributors · Overpass API",
+            "dataTimestamp": str(payload.get("osm3s", {}).get("timestamp_osm_base", "")),
             "roads": roads,
             "facilities": facilities,
             "bounds": PILOT_BOUNDS,
@@ -165,7 +167,7 @@ def _fetch_osm_from_upstream() -> bytes:
             data=body,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "User-Agent": "FloodLens/0.1 local portfolio demonstration",
+                "User-Agent": f"FloodLens/0.2 (portfolio demo; +{CONTACT_URL})",
             },
             method="POST",
         )

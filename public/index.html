@@ -7,9 +7,7 @@
   <meta name="description" content="Simulasi dampak area banjir terhadap akses jaringan jalan ke fasilitas kesehatan di Jakarta.">
   <link rel="icon" href="data:,">
   <title>FloodLens — Peta akses kesehatan Jakarta</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/fonts/fonts.css">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/vendor/leaflet-draw/leaflet.draw.css">
   <link rel="stylesheet" href="/styles.css">
@@ -37,18 +35,19 @@
       <div class="atlas-index"><strong>ATLAS AKSES / JAKARTA</strong><span>Analisis jaringan · radius 5 km</span></div>
     </header>
 
-    <div class="state-strip" role="status" aria-live="polite" aria-label="Tahap analisis">
+    <div class="state-strip" role="group" aria-label="Tahap analisis">
       <span class="strip-label">Status</span>
-      <span class="state-pill" data-pill="empty"><b>00</b> Kosong</span>
+      <span class="state-pill" data-pill="empty" aria-current="step"><b>00</b> Kosong</span>
       <span class="state-pill" data-pill="baseline"><b>01</b> Baseline</span>
       <span class="state-pill" data-pill="drawing"><b>02</b> Gambar</span>
       <span class="state-pill" data-pill="result"><b>03</b> Hasil</span>
       <span class="state-pill" data-pill="error"><b>×</b> Gagal</span>
+      <span class="sr-only" id="stateAnnouncement" aria-live="polite"></span>
     </div>
 
     <main class="workspace">
       <section class="map-region" aria-label="Peta akses kesehatan Jakarta Pusat">
-        <div id="map" role="application" aria-label="Peta Jakarta. Klik untuk menentukan titik awal, gambar poligon untuk mensimulasikan area jalan terendam."></div>
+        <div id="map" role="application" aria-describedby="mapInstructions" aria-label="Peta Jakarta. Klik untuk menentukan titik awal, gambar poligon untuk mensimulasikan area jalan terendam."></div>
 
         <div class="hazard-badge" aria-hidden="true">
           <span class="hazard-badge-mark"></span>
@@ -61,7 +60,11 @@
           <small>JAKARTA PUSAT · AREA MONAS</small>
         </div>
 
-        <div class="map-error" id="mapError" role="alert"></div>
+        <div class="map-error" id="mapError" role="alert">
+          <h2>Sumber data gagal dimuat</h2>
+          <p id="mapErrorText"></p>
+          <button class="secondary-button" id="retryButton" type="button">Coba lagi</button>
+        </div>
 
         <div class="map-footer">
           <aside class="map-legend" aria-label="Legenda indeks bahaya banjir BNPB dan jalur skenario">
@@ -117,7 +120,10 @@
             </button>
             <p class="source-note" id="sourceNote">Mengambil jaringan jalan dan fasilitas kesehatan terbaru dari OpenStreetMap. Butuh koneksi internet.</p>
             <div class="load-progress" id="loadProgress" role="progressbar" aria-label="Mengambil data OpenStreetMap" hidden><span></span></div>
-            <p class="load-progress-text" id="loadProgressText" aria-live="polite"></p>
+            <div class="load-progress-row">
+              <p class="load-progress-text" id="loadProgressText" aria-live="polite"></p>
+              <button class="quiet-button" id="cancelLoad" type="button" hidden>Batal</button>
+            </div>
           </section>
 
           <section class="panel-section" id="scenario-section" data-panel="scenario" role="tabpanel" aria-labelledby="scenario-title">
@@ -165,9 +171,10 @@
                 <span class="metric-label">RS terdekat · baseline → skenario</span>
                 <strong class="metric-value"><span id="beforeDistance">—</span><span class="metric-sep"> → </span><span id="afterDistance">—</span></strong>
                 <span class="metric-sub" id="detourSub">Menunggu skenario</span>
+                <span class="metric-sub route-facilities" id="routeFacilities"></span>
               </div>
               <div>
-                <span class="metric-label">Perubahan rute</span>
+                <span class="metric-label">Selisih jarak RS</span>
                 <strong class="metric-value"><span id="detourValue">—</span></strong>
                 <span class="metric-sub">jarak jaringan jalan</span>
               </div>
@@ -177,6 +184,7 @@
             <p class="result-note" id="resultNote" role="status" aria-live="polite">Pilih titik awal lalu gambar zona untuk melihat dampak terhadap akses kesehatan.</p>
           </section>
         </div>
+        <footer class="inspector-footer">Skenario ilustratif · bukan prediksi banjir atau rute darurat. Ambang 5 km adalah pilihan tampilan, bukan standar akses.</footer>
       </aside>
     </main>
     <p class="sr-only" id="mapCaption">Jakarta · pilih titik awal pada peta untuk memulai</p>

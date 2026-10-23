@@ -8,6 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = ROOT / "public"
 APP_VERSION = "0.2.0"
+CONTACT_URL = os.environ.get(
+    "FLOODLENS_CONTACT", "https://github.com/rinopatrick/floodlens-jakarta"
+)
 HOST = "127.0.0.1"
 PORT = 8766
 
@@ -24,8 +27,8 @@ FLOOD_SERVICE = (
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "
     "script-src 'self'; "
-    "style-src 'self' https://fonts.googleapis.com; "
-    "font-src https://fonts.gstatic.com; "
+    "style-src 'self'; "
+    "font-src 'self'; "
     "img-src 'self' data: blob: https://server.arcgisonline.com; "
     "connect-src 'self'; "
     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"

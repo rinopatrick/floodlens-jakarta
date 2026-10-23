@@ -44,17 +44,22 @@ export function buildGraph(data) {
   return { adjacency, nodes, segments };
 }
 
-export function nearestNode(nodes, point) {
+export function nearestNodeWithDistance(nodes, point) {
   let best = null;
-  let bestDistance = Infinity;
   for (const [nodeId, candidate] of nodes) {
-    const d = distanceMeters(point, { lat: candidate[0], lon: candidate[1] });
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = nodeId;
+    const distance = distanceMeters(point, {
+      lat: candidate[0],
+      lon: candidate[1],
+    });
+    if (!best || distance < best.distance) {
+      best = { nodeId, distance, coord: candidate };
     }
   }
   return best;
+}
+
+export function nearestNode(nodes, point) {
+  return nearestNodeWithDistance(nodes, point)?.nodeId ?? null;
 }
 
 class MinHeap {

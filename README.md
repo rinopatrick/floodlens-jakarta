@@ -19,7 +19,7 @@ Distances are measured along the mapped street graph, not driving time. The 5 km
 
 ## Run locally
 
-Requires Python 3.10+ and an internet connection. The runtime uses Python's standard library. The browser loads map tiles and Google Fonts from the network; Leaflet and Leaflet.draw are served locally.
+Requires Python 3.10+ and an internet connection. The runtime uses Python's standard library. The browser loads map tiles from Esri; Leaflet, Leaflet.draw, and all fonts are served locally.
 
 ```powershell
 cd floodlens-jakarta
@@ -38,6 +38,8 @@ The browser never calls Overpass or BNPB directly. It requests `/api/osm` and `/
 | `FLOODLENS_PORT` | `8766` | HTTP port. Falls back to the platform `PORT` variable. |
 | `FLOODLENS_ENV` | `development` | Set to `production` to reject fixture mode. |
 | `FLOODLENS_FIXTURE_DIR` | unset | Serve deterministic OSM and flood fixtures for tests. |
+| `FLOODLENS_TRUST_PROXY` | `0` | Set to `1` only behind a trusted reverse proxy so rate limiting uses `X-Forwarded-For`. |
+| `FLOODLENS_CONTACT` | repository URL | Contact URL placed in the Overpass/BNPB `User-Agent`. |
 
 Fixture mode is rejected when `FLOODLENS_ENV=production`. In fixture mode the UI labels the data as contoh, disables the hazard layer, and shows a fixture note in the map legend.
 
@@ -76,10 +78,11 @@ The container exposes `GET /healthz` for health checks. `render.yaml` provides t
 Production notes:
 
 - The cache is in-memory and per process. Run a single instance or add a shared cache before scaling horizontally.
-- The server is read-only and has no authentication, rate limiting, or user data.
-- The analysis runs on the browser main thread. The pilot bounding box is sized for that; a larger area needs a Web Worker and a spatial index.
+- The server is read-only and stores no user data. It has no authentication. Rate limiting is in-process: 120 API requests per minute per client/path, plus a 30-second refresh cooldown.
+- `/api/osm` is gzip-compressed, sends an ETag, and allows a 60-second browser cache with stale-while-revalidate. The server cache remains 15 minutes.
+- The analysis runs on the browser main thread. Baseline results are cached per snapped origin, but a larger area still needs a Web Worker and a spatial index.
 - Map tiles are provided by Esri World Street Map; for a high-traffic or commercial deployment, use a licensed tile provider or self-hosted tiles. Automated tests must stub tile requests, not hit a public tile server.
-- Google Fonts remain a third-party network dependency.
+- Fonts, Leaflet, and Leaflet.draw are served locally. Only basemap tiles require a third-party provider.
 - Live upstream data changes over time. CI uses fixtures; run a manual live smoke test before a release.
 
 ## Data and attribution
@@ -96,7 +99,7 @@ OSM data is community-mapped and can be incomplete or out of date. FloodLens onl
 
 ### Vendored libraries
 
-Leaflet 1.9.4 (BSD-2-Clause) and Leaflet.draw 1.0.4 (MIT) are vendored under `public/vendor/` with their license files.
+Leaflet 1.9.4 (BSD-2-Clause), Leaflet.draw 1.0.4 (MIT), and the Fraunces / IBM Plex font files (SIL Open Font License 1.1) are vendored under `public/vendor/` with their license files.
 
 ## Method
 
@@ -116,7 +119,7 @@ floodlens-jakarta/
 │   ├── index.html
 │   ├── styles.css
 │   ├── src/            # ES modules: app, API, graph, analysis, geo
-│   └── vendor/         # Leaflet and Leaflet.draw with licenses
+│   └── vendor/         # Leaflet, Leaflet.draw, and self-hosted fonts with licenses
 ├── floodlens/
 │   ├── config.py       # environment, bounds, CSP, cache TTLs
 │   ├── osm.py          # Overpass query, simplification, validation

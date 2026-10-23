@@ -45,6 +45,12 @@ class TTLCache(Generic[T]):
         with self._lock:
             self._entry = None
 
+    def age(self) -> float | None:
+        with self._lock:
+            if self._entry is None:
+                return None
+            return max(0.0, self._clock() - self._entry.stored_at)
+
     def get_or_fetch(
         self, fetch: Callable[[], T], force_refresh: bool = False
     ) -> T:

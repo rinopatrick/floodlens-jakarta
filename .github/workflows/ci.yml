@@ -55,3 +55,20 @@ jobs:
             test-results/
             playwright-report/
           retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build container image
+        run: docker build -t floodlens:ci .
+      - name: Smoke container health
+        run: |
+          docker run -d --rm --name floodlens-ci -p 8766:8766 floodlens:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8766/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8766/healthz | grep -q '"status":"ok"'
+          docker stop floodlens-ci

@@ -33,9 +33,6 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   await page.route(/https:\/\/server\.arcgisonline\.com\/.*/, (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: floodFixture }),
   );
-  await page.route("https://fonts.googleapis.com/**", (route) =>
-    route.fulfill({ status: 200, contentType: "text/css", body: "" }),
-  );
 
   await page.goto("/");
   await page.locator("#loadButton").click();
@@ -82,4 +79,59 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   expect(externalRequests).toEqual([]);
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
+});
+
+
+test("fixture mode is labelled honestly", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#loadButtonText")).toHaveText("Muat data contoh");
+  await expect(page.locator("#bnpbState")).toHaveText("FIXTURE · NONAKTIF");
+  await expect(page.locator(".fixture-note")).toBeVisible();
+  await expect(page.locator("#hazardToggle")).toBeDisabled();
+});
+
+test("error state exposes a retry action", async ({ page }) => {
+  await page.route("**/api/osm**", (route) =>
+    route.fulfill({
+      status: 502,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "upstream_unavailable",
+          message: "Sumber data OpenStreetMap tidak tersedia.",
+        },
+      }),
+    }),
+  );
+
+  await page.goto("/");
+  await page.click("#loadButton");
+
+  await expect(page.locator("#app")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#mapError")).toBeVisible();
+  await expect(page.locator("#retryButton")).toBeVisible();
+  await expect(page.locator("#mapErrorText")).toContainText(
+    "Sumber data OpenStreetMap",
+  );
+});
+
+test("inspector tabs support arrow keys", async ({ page }) => {
+  await page.goto("/");
+  const scenarioTab = page.getByRole("tab", { name: "Skenario" });
+  await scenarioTab.focus();
+  await page.keyboard.press("ArrowRight");
+
+  await expect(page.getByRole("tab", { name: "Dampak" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("draw toolbar is keyboard operable", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForTimeout(600);
+  await page.locator(".leaflet-draw-draw-polygon").focus();
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("#app")).toHaveAttribute("data-state", "drawing");
 });
