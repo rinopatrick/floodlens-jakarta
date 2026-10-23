@@ -39,7 +39,7 @@ The browser never calls Overpass or BNPB directly. It requests `/api/osm` and `/
 | `FLOODLENS_ENV` | `development` | Set to `production` to reject fixture mode. |
 | `FLOODLENS_FIXTURE_DIR` | unset | Serve deterministic OSM and flood fixtures for tests. |
 
-Fixture mode is rejected when `FLOODLENS_ENV=production`.
+Fixture mode is rejected when `FLOODLENS_ENV=production`. In fixture mode the UI labels the data as contoh, disables the hazard layer, and shows a fixture note in the map legend.
 
 ## Tests
 
