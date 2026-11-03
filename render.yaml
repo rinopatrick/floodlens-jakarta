@@ -9,5 +9,7 @@ services:
         value: production
       - key: FLOODLENS_HOST
         value: 0.0.0.0
+      - key: FLOODLENS_HSTS
+        value: "1"
       - key: FLOODLENS_TRUST_PROXY
         value: "1"

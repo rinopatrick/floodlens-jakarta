@@ -44,7 +44,39 @@ export function buildGraph(data) {
   return { adjacency, nodes, segments };
 }
 
-export function nearestNodeWithDistance(nodes, point) {
+export function buildSpatialIndex(nodes, cellDegrees = 0.01) {
+  const cells = new Map();
+  const key = (lat, lon) => `${Math.floor(lat / cellDegrees)}:${Math.floor(lon / cellDegrees)}`;
+  for (const [nodeId, coord] of nodes) {
+    const cell = key(coord[0], coord[1]);
+    if (!cells.has(cell)) cells.set(cell, []);
+    cells.get(cell).push(nodeId);
+  }
+  return { cells, cellDegrees };
+}
+
+export function nearestNodeWithDistance(nodes, point, index = null) {
+  if (index && nodes.size > 500) {
+    const { cells, cellDegrees } = index;
+    for (let radius = 0; radius < 10; radius++) {
+      const baseLat = Math.floor(point.lat / cellDegrees);
+      const baseLon = Math.floor(point.lon / cellDegrees);
+      let best = null;
+      for (let dLat = -radius; dLat <= radius; dLat++) {
+        for (let dLon = -radius; dLon <= radius; dLon++) {
+          if (Math.max(Math.abs(dLat), Math.abs(dLon)) !== radius) continue;
+          const bucket = cells.get(`${baseLat + dLat}:${baseLon + dLon}`);
+          if (!bucket) continue;
+          for (const nodeId of bucket) {
+            const candidate = nodes.get(nodeId);
+            const distance = distanceMeters(point, { lat: candidate[0], lon: candidate[1] });
+            if (!best || distance < best.distance) best = { nodeId, distance, coord: candidate };
+          }
+        }
+      }
+      if (best) return best;
+    }
+  }
   let best = null;
   for (const [nodeId, candidate] of nodes) {
     const distance = distanceMeters(point, {

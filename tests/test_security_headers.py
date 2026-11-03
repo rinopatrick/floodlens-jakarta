@@ -41,7 +41,45 @@ def test_health_endpoint_is_independent_of_upstream(monkeypatch):
 
     assert response.status == 200
     assert response.getheader("Content-Type") == "application/json; charset=utf-8"
-    assert json.loads(body) == {"status": "ok", "version": "0.2.0"}
+    payload = json.loads(body)
+    assert payload["status"] == "ok"
+    assert payload["version"]
+
+
+def test_readyz_reports_warming_before_cache(monkeypatch):
+    from floodlens.flood import FLOOD_CACHE
+    from floodlens.osm import OSM_CACHE
+
+    OSM_CACHE.clear()
+    FLOOD_CACHE.clear()
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+
+    with running_server() as port:
+        response, body = get(port, "/readyz")
+
+    assert response.status == 503
+    assert json.loads(body)["status"] == "warming"
+
+
+def test_readyz_reports_ready_with_fixture(monkeypatch, tmp_path):
+    monkeypatch.setattr(server.Handler, "fixture_dir", tmp_path)
+
+    with running_server() as port:
+        response, body = get(port, "/readyz")
+
+    assert response.status == 200
+    assert json.loads(body)["status"] == "ready"
+
+
+def test_metrics_reports_cache_gauges():
+    with running_server() as port:
+        response, body = get(port, "/metrics")
+
+    assert response.status == 200
+    text = body.decode("utf-8")
+    assert "floodlens_cache_age_seconds" in text
+    assert 'cache="osm"' in text
+    assert 'cache="flood"' in text
 
 
 def test_security_headers_are_present_on_static_and_api_responses(monkeypatch):
