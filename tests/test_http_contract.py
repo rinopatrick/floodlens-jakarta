@@ -131,7 +131,11 @@ def test_osm_endpoint_returns_simplified_payload(monkeypatch):
 
     assert response.status == 200
     assert response.getheader("Content-Type") == "application/json; charset=utf-8"
-    assert response.getheader("Cache-Control").startswith("public, max-age=60")
+    from floodlens.config import OSM_BROWSER_TTL
+
+    assert response.getheader("Cache-Control").startswith(
+        f"public, max-age={OSM_BROWSER_TTL}"
+    )
     assert body == payload
     assert refreshed.status == 200
     assert refreshed.getheader("Cache-Control") == "no-store"
@@ -168,7 +172,9 @@ def test_flood_endpoint_returns_cached_png(monkeypatch):
 
     assert response.status == 200
     assert response.getheader("Content-Type") == "image/png"
-    assert response.getheader("Cache-Control") == "public, max-age=3600"
+    from floodlens.config import FLOOD_BROWSER_TTL
+
+    assert response.getheader("Cache-Control") == f"public, max-age={FLOOD_BROWSER_TTL}"
     assert body == png
 
 
