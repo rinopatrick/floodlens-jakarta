@@ -46,9 +46,10 @@ def test_fixture_config_reports_fixture_mode(monkeypatch):
 
 def test_fixture_osm_never_calls_upstream(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", FIXTURES)
-    monkeypatch.setattr(
-        server, "fetch_osm", lambda *_args: (_ for _ in ()).throw(AssertionError("upstream"))
-    )
+    def fail(*_args):
+        raise AssertionError("upstream")
+
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", fail)
 
     with running_server() as port:
         response, body = get(port, "/api/osm?refresh=1")
@@ -88,7 +89,9 @@ def test_missing_fixture_returns_clear_error(monkeypatch, tmp_path):
 
 def test_fixture_mode_is_off_by_default(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
-    monkeypatch.setattr(server, "fetch_osm", lambda _refresh=False: b'{"roads":[]}')
+    monkeypatch.setattr(
+        server, "fetch_osm_with_staleness", lambda _refresh=False: (b'{"roads":[]}', False)
+    )
 
     with running_server() as port:
         response, body = get(port, "/api/osm")

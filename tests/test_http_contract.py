@@ -39,6 +39,34 @@ def test_index_is_served():
     assert b"FloodLens" in body
 
 
+def test_osm_serves_stale_payload_with_header_when_upstream_fails(monkeypatch):
+    from floodlens.osm import OSM_CACHE
+
+    stale = json.dumps(
+        {"schemaVersion": 1, "roads": [], "facilities": [], "stale": True}
+    ).encode()
+    OSM_CACHE.clear()
+    OSM_CACHE.set(stale)
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    import floodlens.osm as osm_module
+
+    monkeypatch.setattr(osm_module, "_fetch_osm_from_upstream", fail)
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+
+    try:
+        with running_server() as port:
+            response, body = get(port, "/api/osm")
+    finally:
+        OSM_CACHE.clear()
+
+    assert response.status == 200
+    assert body == stale
+    assert response.getheader("X-Data-Stale") == "1"
+
+
 def test_config_endpoint_reports_live_mode(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
 
@@ -66,9 +94,9 @@ def test_osm_endpoint_returns_simplified_payload(monkeypatch):
 
     def fake_fetch_osm(refresh=False):
         calls.append(refresh)
-        return payload
+        return payload, False
 
-    monkeypatch.setattr(server, "fetch_osm", fake_fetch_osm)
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", fake_fetch_osm)
 
     with running_server() as port:
         response, body = get(port, "/api/osm")
@@ -87,7 +115,7 @@ def test_osm_endpoint_reports_upstream_failure(monkeypatch):
     def fail(_refresh=False):
         raise RuntimeError("OpenStreetMap data could not be fetched: offline")
 
-    monkeypatch.setattr(server, "fetch_osm", fail)
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", fail)
 
     with running_server() as port:
         response, body = get(port, "/api/osm")
@@ -138,7 +166,7 @@ def test_osm_supports_gzip_and_etag(monkeypatch):
             "facilities": [],
         }
     ).encode()
-    monkeypatch.setattr(server, "fetch_osm", lambda _refresh=False: payload)
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", lambda _refresh=False: (payload, False))
 
     with running_server() as port:
         first, body = get(port, "/api/osm", headers={"Accept-Encoding": "gzip"})
@@ -158,7 +186,9 @@ def test_osm_supports_gzip_and_etag(monkeypatch):
 def test_api_responses_carry_rate_limit_headers(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
     monkeypatch.setattr(
-        server, "fetch_osm", lambda _refresh=False: b'{"roads":[],"facilities":[]}'
+        server,
+        "fetch_osm_with_staleness",
+        lambda _refresh=False: (b'{"roads":[],"facilities":[]}', False),
     )
     monkeypatch.setattr(server, "fetch_flood_overlay", lambda: b"\x89PNG\r\n\x1a\n")
 
@@ -182,7 +212,9 @@ def test_osm_rate_limit(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
     monkeypatch.setattr(server.Handler, "api_limiter", RateLimiter(1, 60))
     monkeypatch.setattr(
-        server, "fetch_osm", lambda _refresh=False: b'{"roads":[],"facilities":[]}'
+        server,
+        "fetch_osm_with_staleness",
+        lambda _refresh=False: (b'{"roads":[],"facilities":[]}', False),
     )
 
     with running_server() as port:

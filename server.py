@@ -31,7 +31,7 @@ from floodlens.config import (
 )
 from floodlens.flood import FLOOD_CACHE, fetch_flood_overlay
 from floodlens.limits import Cooldown, RateLimiter
-from floodlens.osm import OSM_CACHE, fetch_osm, simplify_osm
+from floodlens.osm import OSM_CACHE, fetch_osm_with_staleness, simplify_osm
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -322,11 +322,13 @@ class Handler(SimpleHTTPRequestHandler):
                                 refresh = False
                                 headers.append(("X-Refresh", "cooldown"))
                                 headers.append(("X-Refresh-Retry-After", str(retry)))
-                        body = fetch_osm(refresh)
+                        body, stale = fetch_osm_with_staleness(refresh)
                         payload = json.loads(body)
                         timestamp = payload.get("dataTimestamp", "")
                         if timestamp:
                             headers.append(("X-Data-Timestamp", str(timestamp)))
+                        if stale:
+                            headers.append(("X-Data-Stale", "1"))
                         age = OSM_CACHE.age()
                         if age is not None:
                             headers.append(("X-Data-Age", str(int(age))))
