@@ -34,7 +34,7 @@ def test_health_endpoint_is_independent_of_upstream(monkeypatch):
         raise AssertionError("health check must not call upstream")
 
     monkeypatch.setattr(server, "fetch_osm_with_staleness", fail)
-    monkeypatch.setattr(server, "fetch_flood_overlay", fail)
+    monkeypatch.setattr(server, "fetch_flood_overlay_with_staleness", fail)
 
     with running_server() as port:
         response, body = get(port, "/healthz")
@@ -84,7 +84,9 @@ def test_metrics_reports_cache_gauges():
 
 def test_security_headers_are_present_on_static_and_api_responses(monkeypatch):
     monkeypatch.setattr(server, "fetch_osm_with_staleness", lambda _refresh=False: (b"{}", False))
-    monkeypatch.setattr(server, "fetch_flood_overlay", lambda: b"\x89PNG\r\n\x1a\n")
+    monkeypatch.setattr(
+        server, "fetch_flood_overlay_with_staleness", lambda: (b"\x89PNG\r\n\x1a\n", False)
+    )
 
     with running_server() as port:
         responses = [get(port, "/")[0], get(port, "/healthz")[0], get(port, "/api/osm")[0]]

@@ -39,6 +39,12 @@ def fetch_flood_overlay(force_refresh: bool = False) -> bytes:
     return FLOOD_CACHE.get_or_fetch(_fetch_flood_overlay, force_refresh)
 
 
+def fetch_flood_overlay_with_staleness(force_refresh: bool = False) -> tuple[bytes, bool]:
+    stale_before = FLOOD_CACHE.get_stale()
+    body = fetch_flood_overlay(force_refresh)
+    return body, stale_before is not None and body == stale_before
+
+
 def _fetch_flood_overlay() -> bytes:
     request = Request(
         flood_overlay_url(),

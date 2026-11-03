@@ -29,7 +29,7 @@ from floodlens.config import (
     Settings,
     load_settings,
 )
-from floodlens.flood import FLOOD_CACHE, fetch_flood_overlay
+from floodlens.flood import FLOOD_CACHE, fetch_flood_overlay_with_staleness
 from floodlens.limits import Cooldown, RateLimiter
 from floodlens.osm import OSM_CACHE, fetch_osm_with_staleness, simplify_osm
 
@@ -365,15 +365,24 @@ class Handler(SimpleHTTPRequestHandler):
                         body = self._fixture_bytes("flood.png")
                         if not body.startswith(b"\x89PNG"):
                             raise RuntimeError("fixture flood.png is not a PNG")
+                        self.send_bytes(
+                            body,
+                            "image/png",
+                            "public, max-age=3600",
+                            etag=True,
+                        )
                     else:
-                        body = fetch_flood_overlay()
-                    self.send_bytes(
-                        body,
-                        "image/png",
-                        "public, max-age=3600",
-                        etag=True,
-                        extra_headers=tuple(self._rate_limit_headers(parsed.path)),
-                    )
+                        body, stale = fetch_flood_overlay_with_staleness()
+                        extra = list(self._rate_limit_headers(parsed.path))
+                        if stale:
+                            extra.append(("X-Data-Stale", "1"))
+                        self.send_bytes(
+                            body,
+                            "image/png",
+                            "public, max-age=3600",
+                            etag=True,
+                            extra_headers=tuple(extra),
+                        )
                 except Exception as exc:
                     self._write_error_log(parsed.path, exc)
                     if fixture:
