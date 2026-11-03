@@ -55,10 +55,11 @@ def test_osm_serves_stale_payload_with_header_when_upstream_fails(monkeypatch):
 
     monkeypatch.setattr(osm_module, "_fetch_osm_from_upstream", fail)
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    server.Handler.refresh_cooldown.clear()
 
     try:
         with running_server() as port:
-            response, body = get(port, "/api/osm")
+            response, body = get(port, "/api/osm?refresh=1")
     finally:
         OSM_CACHE.clear()
 
@@ -82,7 +83,7 @@ def test_flood_serves_stale_overlay_with_header_when_upstream_fails(monkeypatch)
 
     try:
         with running_server() as port:
-            response, body = get(port, "/api/flood")
+            response, body = get(port, "/api/flood?refresh=1")
     finally:
         flood_module.FLOOD_CACHE.clear()
 
@@ -113,6 +114,7 @@ def test_config_endpoint_reports_live_mode(monkeypatch):
 
 
 def test_osm_endpoint_returns_simplified_payload(monkeypatch):
+    server.Handler.refresh_cooldown.clear()
     payload = json.dumps({"schemaVersion": 1, "roads": [], "facilities": []}).encode()
     calls = []
 
@@ -156,7 +158,9 @@ def test_osm_endpoint_reports_upstream_failure(monkeypatch):
 
 def test_flood_endpoint_returns_cached_png(monkeypatch):
     png = b"\x89PNG\r\n\x1a\nsynthetic"
-    monkeypatch.setattr(server, "fetch_flood_overlay_with_staleness", lambda: (png, False))
+    monkeypatch.setattr(
+        server, "fetch_flood_overlay_with_staleness", lambda _refresh=False: (png, False)
+    )
 
     with running_server() as port:
         response, body = get(port, "/api/flood")
@@ -168,7 +172,7 @@ def test_flood_endpoint_returns_cached_png(monkeypatch):
 
 
 def test_flood_endpoint_reports_upstream_failure(monkeypatch):
-    def fail():
+    def fail(_refresh=False):
         raise RuntimeError("BNPB returned an unexpected map image response")
 
     monkeypatch.setattr(server, "fetch_flood_overlay_with_staleness", fail)
@@ -215,7 +219,9 @@ def test_api_responses_carry_rate_limit_headers(monkeypatch):
         lambda _refresh=False: (b'{"roads":[],"facilities":[]}', False),
     )
     monkeypatch.setattr(
-        server, "fetch_flood_overlay_with_staleness", lambda: (b"\x89PNG\r\n\x1a\n", False)
+        server,
+        "fetch_flood_overlay_with_staleness",
+        lambda _refresh=False: (b"\x89PNG\r\n\x1a\n", False),
     )
 
     with running_server() as port:

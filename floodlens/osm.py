@@ -203,9 +203,7 @@ def fetch_osm(force_refresh: bool = False) -> bytes:
 
 
 def fetch_osm_with_staleness(force_refresh: bool = False) -> tuple[bytes, bool]:
-    stale_before = OSM_CACHE.get_stale()
-    body = fetch_osm(force_refresh)
-    return body, stale_before is not None and body == stale_before
+    return OSM_CACHE.get_or_fetch_with_staleness(_fetch_osm_from_upstream, force_refresh)
 
 
 def _fetch_osm_from_upstream() -> bytes:
