@@ -8,9 +8,11 @@ import {
 import { formatKm, isInsideBounds } from "./geo.js";
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
-import { buildGraph, dijkstra, nearestNodeWithDistance } from "./graph.js";
+import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
+let MAX_POLYGON_VERTICES = 512;
+let spatialIndex = null;
 
 function isInsidePilot(lat, lon) {
   return isInsideBounds(lat, lon, PILOT_BOUNDS);
@@ -196,6 +198,9 @@ function isInsidePilot(lat, lon) {
         if (Number.isFinite(config.maxAccessMeters)) {
           MAX_ACCESS_METERS = config.maxAccessMeters;
         }
+        if (Number.isFinite(config.maxPolygonVertices)) {
+          MAX_POLYGON_VERTICES = config.maxPolygonVertices;
+        }
         // Re-check an origin picked before the server bounds arrived.
         if (!isInsidePilot(origin.lat, origin.lon)) {
           setOrigin({ ...DEFAULT_ORIGIN }, DEFAULT_ORIGIN.label);
@@ -230,7 +235,7 @@ function isInsidePilot(lat, lon) {
         const match = nearestNodeWithDistance(graphData.nodes, {
           lat: facility.lat,
           lon: facility.lon,
-        });
+        }, spatialIndex);
         return match
           ? { ...facility, nodeId: match.nodeId, snapDistance: match.distance }
           : null;
@@ -238,13 +243,22 @@ function isInsidePilot(lat, lon) {
     }
     function drawRoads() {
       roadsLayer.clearLayers();
+      const bounds = map.getBounds?.();
+      const batch = [];
+      const flush = () => {
+        for (const line of batch) line.addTo(roadsLayer);
+        batch.length = 0;
+      };
       for (const road of osmData.roads) {
         // All routable classes are drawn so routes never float over blank tiles.
         if (!["motorway", "trunk", "primary", "secondary", "tertiary", "residential", "unclassified"].includes(road.kind)) continue;
         const minor = !["motorway", "trunk", "primary", "secondary"].includes(road.kind);
         const latlngs = road.points.map((p) => [p.lat, p.lon]);
-        L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : minor ? 0.8 : 1.25, opacity: minor ? .45 : .64, interactive: false }).addTo(roadsLayer);
+        if (bounds && !latlngs.some(([lat, lon]) => bounds.contains([lat, lon]))) continue;
+        batch.push(L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : minor ? 0.8 : 1.25, opacity: minor ? .45 : .64, interactive: false }));
+        if (batch.length >= 500) flush();
       }
+      flush();
       drawFacilities();
     }
     function drawFacilities() {
@@ -379,7 +393,13 @@ function isInsidePilot(lat, lon) {
     }
     function currentRing(layer) {
       const points = layer.getLatLngs();
-      return Array.isArray(points[0]) ? points[0] : points;
+      const ring = Array.isArray(points[0]) ? points[0] : points;
+      if (ring.length > MAX_POLYGON_VERTICES) {
+        showMapError(`Poligon terlalu detail. Sederhanakan hingga ${MAX_POLYGON_VERTICES} titik.`);
+        return null;
+      }
+      hideMapError();
+      return ring;
     }
     function renderClosures(closed) {
       closureLayer.clearLayers();
@@ -481,7 +501,7 @@ function isInsidePilot(lat, lon) {
       const snap = nearestNodeWithDistance(graphData.nodes, {
         lat: origin.lat,
         lon: origin.lon,
-      });
+      }, spatialIndex);
       if (!snap) return;
       originSnap = {
         lat: snap.coord[0],
@@ -495,9 +515,12 @@ function isInsidePilot(lat, lon) {
         };
       }
       const baseline = baselineCache.result;
-      const closed = activePolygon
-        ? closedSegmentsFor(graphData.segments, currentRing(activePolygon))
-        : new Set();
+      const ring = activePolygon ? currentRing(activePolygon) : null;
+      if (activePolygon && !ring) {
+        setAnalysisPending(false);
+        return;
+      }
+      const closed = ring ? closedSegmentsFor(graphData.segments, ring) : new Set();
       const scenario = dijkstra(graphData.adjacency, snap.nodeId, closed);
       renderAnalysis(buildRenderPayload({
         snap,
@@ -564,12 +587,18 @@ function isInsidePilot(lat, lon) {
       if (analysisWorker) {
         setAnalysisPending(true);
         const requestId = ++analysisRequestId;
-        const ring = activePolygon
-          ? currentRing(activePolygon).map((point) => ({
-              lat: point.lat,
-              lng: point.lng,
-            }))
-          : null;
+        let ring = null;
+        if (activePolygon) {
+          const raw = currentRing(activePolygon);
+          if (!raw) {
+            setAnalysisPending(false);
+            return;
+          }
+          ring = raw.map((point) => ({
+            lat: point.lat,
+            lng: point.lng,
+          }));
+        }
         analysisWorker.postMessage({
           type: "analyze",
           requestId,
@@ -594,6 +623,7 @@ function isInsidePilot(lat, lon) {
         const payload = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
+        spatialIndex = buildSpatialIndex(graphData.nodes);
         baselineCache = { key: null, result: null };
         originSnap = null;
         const nodeCount = graphData.nodes.size;

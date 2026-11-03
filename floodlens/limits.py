@@ -22,6 +22,10 @@ class RateLimiter:
         self._lock = threading.Lock()
         self._hits: dict[str, list[float]] = {}
 
+    @property
+    def limit(self) -> int:
+        return self._limit
+
     def allow(self, key: str) -> tuple[bool, int]:
         now = self._clock()
         with self._lock:
@@ -34,6 +38,15 @@ class RateLimiter:
             hits.append(now)
             self._hits[key] = hits
             return True, 0
+
+    def remaining(self, key: str) -> tuple[int, int]:
+        now = self._clock()
+        with self._lock:
+            hits = [stamp for stamp in self._hits.get(key, []) if now - stamp < self._window]
+            if len(hits) >= self._limit:
+                retry = max(1, int(self._window - (now - hits[0])))
+                return 0, retry
+            return self._limit - len(hits), 0
 
     def _evict(self, now: float) -> None:
         # shortcut: drop idle client keys so the map cannot grow forever.

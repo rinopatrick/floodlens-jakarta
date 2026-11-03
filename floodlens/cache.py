@@ -59,6 +59,21 @@ class TTLCache(Generic[T]):
                 return None
             return max(0.0, self._clock() - self._entry.stored_at)
 
+    def stats(self) -> dict:
+        with self._lock:
+            entry = self._entry
+            inflight = self._inflight is not None
+        if entry is None:
+            age = None
+        else:
+            age = max(0.0, self._clock() - entry.stored_at)
+        return {
+            "has_value": entry is not None,
+            "age_seconds": age,
+            "ttl_seconds": self._ttl,
+            "inflight": inflight,
+        }
+
     def get_or_fetch(
         self, fetch: Callable[[], T], force_refresh: bool = False
     ) -> T:

@@ -19,6 +19,8 @@ from floodlens.config import (
     CONTENT_SECURITY_POLICY,
     EAST,
     MAX_ACCESS_METERS,
+    MAX_POLYGON_VERTICES,
+    MAX_REQUEST_BYTES,
     NORTH,
     PUBLIC_DIR,
     SOUTH,
@@ -26,7 +28,7 @@ from floodlens.config import (
     Settings,
     load_settings,
 )
-from floodlens.flood import fetch_flood_overlay
+from floodlens.flood import FLOOD_CACHE, fetch_flood_overlay
 from floodlens.limits import Cooldown, RateLimiter
 from floodlens.osm import OSM_CACHE, fetch_osm, simplify_osm
 
@@ -56,6 +58,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Request-ID", getattr(self, "request_id", ""))
+        if os.environ.get("FLOODLENS_HSTS", "0") == "1":
+            self.send_header("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
         if not getattr(self, "_cache_control", None):
             path = urlsplit(self.path).path
             if path.startswith("/vendor/"):
@@ -170,24 +174,44 @@ class Handler(SimpleHTTPRequestHandler):
                 return forwarded
         return self.client_address[0]
 
-    def _allow_api(self, path: str) -> bool:
+    def _allow_api(self, path: str) -> tuple[bool, int | None]:
         client = self._client_key()
         allowed, retry = self.api_limiter.allow(f"{client}:{path}")
         if allowed:
-            return True
+            return True, None
         self.send_error_json(
             "Terlalu banyak permintaan. Coba lagi.",
             status=429,
             code="rate_limited",
             retry_after=retry,
         )
-        return False
+        return False, retry
+
+    def _rate_limit_headers(self, path: str) -> list[tuple[str, str]]:
+        client = self._client_key()
+        remaining, retry = self.api_limiter.remaining(f"{client}:{path}")
+        headers = [
+            ("X-RateLimit-Limit", str(self.api_limiter.limit)),
+            ("X-RateLimit-Remaining", str(remaining)),
+        ]
+        if retry:
+            headers.append(("Retry-After", str(retry)))
+        return headers
 
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
         self._cache_control = None
         parsed = urlsplit(self.path)
+
+        if len(self.path.encode("utf-8")) > MAX_REQUEST_BYTES:
+            self.send_error_json(
+                "Permintaan terlalu besar.",
+                status=414,
+                code="request_too_large",
+            )
+            self._write_access_log(parsed.path, started)
+            return
 
         if not self.request_slots.acquire(blocking=False):
             self.send_error_json(
@@ -200,10 +224,12 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         try:
-            if parsed.path in {"/api/osm", "/api/flood"} and not self._allow_api(
-                parsed.path
-            ):
-                return
+            api_path = parsed.path in {"/api/osm", "/api/flood"}
+            if api_path:
+                allowed, _retry = self._allow_api(parsed.path)
+                if not allowed:
+                    self._write_access_log(parsed.path, started)
+                    return
 
             if parsed.path == "/api/config":
                 body = json.dumps(
@@ -217,6 +243,7 @@ class Handler(SimpleHTTPRequestHandler):
                             "east": EAST,
                         },
                         "maxAccessMeters": MAX_ACCESS_METERS,
+                        "maxPolygonVertices": MAX_POLYGON_VERTICES,
                     },
                     separators=(",", ":"),
                 ).encode("utf-8")
@@ -227,6 +254,49 @@ class Handler(SimpleHTTPRequestHandler):
                     {"status": "ok", "version": APP_VERSION}, separators=(",", ":")
                 ).encode("utf-8")
                 self.send_bytes(body, "application/json; charset=utf-8")
+                return
+            if parsed.path == "/readyz":
+                osm_age = OSM_CACHE.age()
+                flood_age = FLOOD_CACHE.age()
+                ready = osm_age is not None or self.fixture_dir is not None
+                body = json.dumps(
+                    {
+                        "status": "ready" if ready else "warming",
+                        "version": APP_VERSION,
+                        "osm_cached": osm_age is not None,
+                        "flood_cached": flood_age is not None,
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                if ready:
+                    self.send_bytes(body, "application/json; charset=utf-8", cache="no-store")
+                else:
+                    self.send_response(503)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("Cache-Control", "no-store")
+                    self._cache_control = "no-store"
+                    self.end_headers()
+                    self.wfile.write(body)
+                return
+            if parsed.path == "/metrics":
+                lines = [
+                    "# HELP floodlens_cache_age_seconds Age of cached upstream payload.",
+                    "# TYPE floodlens_cache_age_seconds gauge",
+                ]
+                for name, cache in (("osm", OSM_CACHE), ("flood", FLOOD_CACHE)):
+                    stats = cache.stats()
+                    age = stats["age_seconds"]
+                    lines.append(
+                        f"floodlens_cache_age_seconds{{cache=\"{name}\"}} "
+                        f"{age if age is not None else -1}"
+                    )
+                    lines.append(
+                        f"floodlens_cache_present{{cache=\"{name}\"}} "
+                        f"{1 if stats['has_value'] else 0}"
+                    )
+                body = ("\n".join(lines) + "\n").encode("utf-8")
+                self.send_bytes(body, "text/plain; version=0.0.4; charset=utf-8", cache="no-store")
                 return
             if parsed.path == "/api/osm":
                 fixture = self.fixture_dir is not None
@@ -241,7 +311,7 @@ class Handler(SimpleHTTPRequestHandler):
                         )
                     else:
                         refresh = "refresh=1" in parsed.query
-                        headers: list[tuple[str, str]] = []
+                        headers: list[tuple[str, str]] = list(self._rate_limit_headers(parsed.path))
                         if refresh:
                             allowed, retry = self.refresh_cooldown.allow(
                                 self._client_key()
@@ -298,6 +368,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "image/png",
                         "public, max-age=3600",
                         etag=True,
+                        extra_headers=tuple(self._rate_limit_headers(parsed.path)),
                     )
                 except Exception as exc:
                     self._write_error_log(parsed.path, exc)
