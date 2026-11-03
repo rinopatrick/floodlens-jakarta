@@ -58,3 +58,13 @@ def test_fixture_mode_is_allowed_in_development():
     settings = load_settings({"FLOODLENS_FIXTURE_DIR": "tests/fixtures"})
 
     assert settings.fixture_dir is not None
+
+
+def test_release_version_is_single_sourced():
+    import re
+
+    from floodlens.config import APP_VERSION
+
+    assert re.fullmatch(r"0\.\d+\.\d+", APP_VERSION), APP_VERSION
+    health = Path(__file__).parent.parent / "server.py"
+    assert "APP_VERSION" in health.read_text(encoding="utf-8")

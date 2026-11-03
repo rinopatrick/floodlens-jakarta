@@ -75,6 +75,17 @@ docker run --rm -p 8766:8766 -e FLOODLENS_HOST=0.0.0.0 floodlens
 
 The container exposes `GET /healthz` for liveness, `GET /readyz` for cache readiness, and `GET /metrics` for cache gauges. The CI docker job asserts all three on a cold container. `render.yaml` provides the equivalent Render blueprint.
 
+### Release checklist
+
+Run these before tagging a release. CI covers the first four. The last two need an operator.
+
+1. `python -m pytest -q` passes.
+2. `python -m ruff check .` passes.
+3. `npm test` passes.
+4. `npx playwright test` passes.
+5. Run one live OSM fetch outside fixtures and confirm `/readyz` turns ready.
+6. Bump `APP_VERSION` in `floodlens/config.py` once per release.
+
 Production notes:
 
 - The cache is in-memory and per process. Run a single instance or add a shared cache before scaling horizontally. `GET /readyz` returns 503 while cold and 200 once OSM or fixture data is present.
