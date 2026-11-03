@@ -80,6 +80,7 @@ def test_flood_serves_stale_overlay_with_header_when_upstream_fails(monkeypatch)
 
     monkeypatch.setattr(flood_module, "_fetch_flood_overlay", fail)
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    server.Handler.refresh_cooldown.clear()
 
     try:
         with running_server() as port:
@@ -257,3 +258,25 @@ def test_osm_rate_limit(monkeypatch):
     assert second.status == 429
     assert second.getheader("Retry-After")
     assert json.loads(body)["error"]["code"] == "rate_limited"
+
+
+def test_flood_refresh_cooldown_blocks_second_refresh(monkeypatch):
+    from floodlens.limits import Cooldown
+
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    monkeypatch.setattr(server.Handler, "refresh_cooldown", Cooldown(seconds=30))
+    monkeypatch.setattr(
+        server,
+        "fetch_flood_overlay_with_staleness",
+        lambda _refresh=False: (b"\x89PNG\r\n\x1a\n", False),
+    )
+
+    with running_server() as port:
+        first, _ = get(port, "/api/flood?refresh=1")
+        second, _ = get(port, "/api/flood?refresh=1")
+
+    assert first.status == 200
+    assert first.getheader("X-Refresh") is None
+    assert second.status == 200
+    assert second.getheader("X-Refresh") == "cooldown"
+    assert second.getheader("X-Refresh-Retry-After") is not None
