@@ -35,10 +35,6 @@ def flood_overlay_url() -> str:
     return f"{FLOOD_SERVICE}/export?{params}"
 
 
-def fetch_flood_overlay(force_refresh: bool = False) -> bytes:
-    return FLOOD_CACHE.get_or_fetch(_fetch_flood_overlay, force_refresh)
-
-
 def fetch_flood_overlay_with_staleness(force_refresh: bool = False) -> tuple[bytes, bool]:
     return FLOOD_CACHE.get_or_fetch_with_staleness(_fetch_flood_overlay, force_refresh)
 
