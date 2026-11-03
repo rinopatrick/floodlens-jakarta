@@ -73,7 +73,7 @@ docker build -t floodlens .
 docker run --rm -p 8766:8766 -e FLOODLENS_HOST=0.0.0.0 floodlens
 ```
 
-The container exposes `GET /healthz` for liveness, `GET /readyz` for cache readiness, and `GET /metrics` for cache gauges. `render.yaml` provides the equivalent Render blueprint.
+The container exposes `GET /healthz` for liveness, `GET /readyz` for cache readiness, and `GET /metrics` for cache gauges. The CI docker job asserts all three on a cold container. `render.yaml` provides the equivalent Render blueprint.
 
 Production notes:
 

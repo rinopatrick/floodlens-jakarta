@@ -29,7 +29,7 @@ export function makeScenario() {
   }));
   const start = nearestNode(graph.nodes, { lat: -6.2, lon: 106.83 });
   const baseline = dijkstra(graph.adjacency, start);
-  const closed = closedSegmentsFor(graph.segments, RING);
+  const { closed, zoneAreaM2 } = closedSegmentsFor(graph.segments, RING);
   const scenario = dijkstra(graph.adjacency, start, closed);
-  return { graph, facilities, start, baseline, closed, scenario };
+  return { graph, facilities, start, baseline, closed, zoneAreaM2, scenario };
 }
