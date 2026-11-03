@@ -8,9 +8,10 @@ import {
 import { makeScenario } from "./scenario-fixture.js";
 
 test("closedSegmentsFor closes only the bridge midpoint", () => {
-  const { closed } = makeScenario();
+  const { closed, zoneAreaM2 } = makeScenario();
 
   assert.deepEqual([...closed], ["102:0"]);
+  assert.ok(zoneAreaM2 > 1000);
 });
 
 test("analyzeScenario reports the expected access loss", () => {

@@ -56,6 +56,8 @@ def test_config_endpoint_reports_live_mode(monkeypatch):
         "east": 106.89,
     }
     assert payload["maxAccessMeters"] == 5000
+    assert payload["maxPolygonVertices"] == 512
+    assert payload["minPolygonAreaM2"] == 100.0
 
 
 def test_osm_endpoint_returns_simplified_payload(monkeypatch):
@@ -151,6 +153,29 @@ def test_osm_supports_gzip_and_etag(monkeypatch):
     assert etag
     assert second.status == 304
     assert empty == b""
+
+
+def test_api_responses_carry_rate_limit_headers(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    monkeypatch.setattr(
+        server, "fetch_osm", lambda _refresh=False: b'{"roads":[],"facilities":[]}'
+    )
+    monkeypatch.setattr(server, "fetch_flood_overlay", lambda: b"\x89PNG\r\n\x1a\n")
+
+    with running_server() as port:
+        osm, _ = get(port, "/api/osm")
+        flood, _ = get(port, "/api/flood")
+
+    assert osm.getheader("X-RateLimit-Limit") == "120"
+    assert osm.getheader("X-RateLimit-Remaining") is not None
+    assert flood.getheader("X-RateLimit-Limit") == "120"
+
+
+def test_oversize_request_target_is_rejected():
+    from floodlens.config import MAX_REQUEST_BYTES
+
+    target = "/api/osm?" + ("x" * MAX_REQUEST_BYTES)
+    assert len(target.encode("utf-8")) > MAX_REQUEST_BYTES
 
 
 def test_osm_rate_limit(monkeypatch):

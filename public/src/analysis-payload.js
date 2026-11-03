@@ -3,7 +3,7 @@ import { restorePath } from "./graph.js";
 
 // One render-payload builder for the Worker path and the main-thread
 // fallback. Pure: no Leaflet, no DOM, unit-tested.
-export function buildRenderPayload({ snap, baseline, scenario, closed, facilityList, nodes, maxMeters }) {
+export function buildRenderPayload({ snap, baseline, scenario, closed, zoneAreaM2 = 0, facilityList, nodes, maxMeters }) {
   const summary = analyzeScenario({
     facilities: facilityList,
     baseline,
@@ -21,6 +21,7 @@ export function buildRenderPayload({ snap, baseline, scenario, closed, facilityL
     },
     closed: [...closed],
     closedSize: closed.size,
+    zoneAreaM2: Math.round(zoneAreaM2),
     summary: {
       beforeInRange: summary.beforeInRange,
       afterInRange: summary.afterInRange,

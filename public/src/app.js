@@ -5,13 +5,14 @@ import {
   PILOT_BOUNDS as PILOT_FALLBACK,
   TILE_LAYER,
 } from "./config.js";
-import { formatKm, isInsideBounds } from "./geo.js";
+import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } from "./geo.js";
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
 import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
 let MAX_POLYGON_VERTICES = 512;
+let MIN_POLYGON_AREA_M2 = 100;
 let spatialIndex = null;
 
 function isInsidePilot(lat, lon) {
@@ -201,6 +202,9 @@ function isInsidePilot(lat, lon) {
         if (Number.isFinite(config.maxPolygonVertices)) {
           MAX_POLYGON_VERTICES = config.maxPolygonVertices;
         }
+        if (Number.isFinite(config.minPolygonAreaM2)) {
+          MIN_POLYGON_AREA_M2 = config.minPolygonAreaM2;
+        }
         // Re-check an origin picked before the server bounds arrived.
         if (!isInsidePilot(origin.lat, origin.lon)) {
           setOrigin({ ...DEFAULT_ORIGIN }, DEFAULT_ORIGIN.label);
@@ -323,7 +327,7 @@ function isInsidePilot(lat, lon) {
         interactive: false,
       })
         .bindTooltip(
-          `Titik analisis · ${Math.round(originSnap.distance)} m dari klik`,
+          `Titik analisis · ${Math.round(originSnap.distance)} m dari klik · snap ${describeSnapQuality(originSnap.distance)}`,
           { className: "custom-tooltip" },
         )
         .addTo(snapLayer);
@@ -396,6 +400,10 @@ function isInsidePilot(lat, lon) {
       const ring = Array.isArray(points[0]) ? points[0] : points;
       if (ring.length > MAX_POLYGON_VERTICES) {
         showMapError(`Poligon terlalu detail. Sederhanakan hingga ${MAX_POLYGON_VERTICES} titik.`);
+        return null;
+      }
+      if (ringAreaSquareMeters(ring) < MIN_POLYGON_AREA_M2) {
+        showMapError("Zona terlalu kecil. Perbesar zona agar memutus segmen secara bermakna.");
         return null;
       }
       hideMapError();
@@ -480,9 +488,20 @@ function isInsidePilot(lat, lon) {
       $("resultTag").textContent = activePolygon ? "HASIL SKENARIO" : "BASELINE";
       $("afterDistance").classList.toggle("warning", Boolean(activePolygon && summary.lost > 0));
       const snapNote = data.farSnaps ? ` ${data.farSnaps} fasilitas di-snap lebih dari 500 m.` : "";
+      const areaNote = activePolygon && Number.isFinite(data.zoneAreaM2)
+        ? ` Zona ${(data.zoneAreaM2 / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 2 })} km².`
+        : "";
+      const noClosureNote = activePolygon && data.closedSize === 0
+        ? " Zona tidak memutus segmen mana pun. Perbesar atau geser zona."
+        : "";
+      const smallZoneNote = activePolygon
+        && data.zoneAreaM2 > 0 && data.zoneAreaM2 < 100
+        && data.closedSize > 0
+        ? " Zona kecil. Hasil sensitif terhadap titik tengah segmen."
+        : "";
       $("resultNote").textContent = (!activePolygon
         ? "Baseline rute siap. Gambar poligon pada peta untuk mengasumsikan ruas jalan di dalamnya terputus."
-        : `${data.closedSize.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`) + snapNote;
+        : `${data.closedSize.toLocaleString("id-ID")} segmen jalan masuk zona. ${summary.lost ? `${summary.lost} fasilitas keluar dari radius akses 5 km.` : "Belum ada fasilitas yang keluar dari radius akses 5 km."}${summary.inaccessible ? " Tidak ada fasilitas yang tetap terhubung." : ""}`) + snapNote + areaNote + noClosureNote + smallZoneNote;
       $("facilityList").innerHTML = facilityRowsFromData(data.rows);
       renderRoutePair(data.baselinePath, data.scenarioPath);
     }
@@ -520,13 +539,16 @@ function isInsidePilot(lat, lon) {
         setAnalysisPending(false);
         return;
       }
-      const closed = ring ? closedSegmentsFor(graphData.segments, ring) : new Set();
-      const scenario = dijkstra(graphData.adjacency, snap.nodeId, closed);
+      const closure = ring
+        ? closedSegmentsFor(graphData.segments, ring)
+        : { closed: new Set(), zoneAreaM2: 0 };
+      const scenario = dijkstra(graphData.adjacency, snap.nodeId, closure.closed);
       renderAnalysis(buildRenderPayload({
         snap,
         baseline,
         scenario,
-        closed,
+        closed: closure.closed,
+        zoneAreaM2: closure.zoneAreaM2,
         facilityList: facilities,
         nodes: graphData.nodes,
         maxMeters: MAX_ACCESS_METERS,

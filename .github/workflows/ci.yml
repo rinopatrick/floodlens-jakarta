@@ -71,4 +71,7 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:8766/healthz | grep -q '"status":"ok"'
+          curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8766/readyz | grep -Eq "200|503"
+          curl -s http://127.0.0.1:8766/readyz | grep -q '"status":"warming"'
+          curl -fsS http://127.0.0.1:8766/metrics | grep -q floodlens_cache_age_seconds
           docker stop floodlens-ci

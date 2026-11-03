@@ -1,8 +1,15 @@
-import { pointInPolygon } from "./geo.js";
+import { pointInPolygon, ringAreaSquareMeters } from "./geo.js";
+
+export const SCENARIO_FLAGS = {
+  NO_CLOSURE: "no_closure",
+  SMALL_ZONE: "small_zone",
+  FAR_SNAP: "far_snap",
+  ORIGIN_FAR: "origin_far",
+};
 
 export function closedSegmentsFor(segments, ring) {
   const closed = new Set();
-  if (!ring || ring.length < 3) return closed;
+  if (!ring || ring.length < 3) return { closed, zoneAreaM2: 0 };
   for (const segment of segments) {
     const midpoint = [
       (segment.a[0] + segment.b[0]) / 2,
@@ -10,7 +17,7 @@ export function closedSegmentsFor(segments, ring) {
     ];
     if (pointInPolygon(midpoint, ring)) closed.add(segment.key);
   }
-  return closed;
+  return { closed, zoneAreaM2: ringAreaSquareMeters(ring) };
 }
 
 export function nearestFacility(facilities, distances, kind = null) {

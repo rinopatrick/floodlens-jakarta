@@ -21,6 +21,7 @@ from floodlens.config import (
     MAX_ACCESS_METERS,
     MAX_POLYGON_VERTICES,
     MAX_REQUEST_BYTES,
+    MIN_POLYGON_AREA_M2,
     NORTH,
     PUBLIC_DIR,
     SOUTH,
@@ -244,6 +245,7 @@ class Handler(SimpleHTTPRequestHandler):
                         },
                         "maxAccessMeters": MAX_ACCESS_METERS,
                         "maxPolygonVertices": MAX_POLYGON_VERTICES,
+                        "minPolygonAreaM2": MIN_POLYGON_AREA_M2,
                     },
                     separators=(",", ":"),
                 ).encode("utf-8")

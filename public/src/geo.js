@@ -44,3 +44,26 @@ export function pointInPolygon(point, ring) {
   }
   return inside;
 }
+
+export function ringAreaSquareMeters(ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return 0;
+  const origin = ring[0];
+  let total = 0;
+  for (let i = 1; i < ring.length - 1; i++) {
+    const a = { lat: ring[i].lat - origin.lat, lon: ring[i].lng - origin.lng };
+    const b = { lat: ring[i + 1].lat - origin.lat, lon: ring[i + 1].lng - origin.lng };
+    const ax = a.lon * 111320 * Math.cos((origin.lat * Math.PI) / 180);
+    const ay = a.lat * 110540;
+    const bx = b.lon * 111320 * Math.cos((origin.lat * Math.PI) / 180);
+    const by = b.lat * 110540;
+    total += (ax * by - bx * ay) / 2;
+  }
+  return Math.abs(total);
+}
+
+export function describeSnapQuality(distanceMeters, warnAt = 500) {
+  if (!Number.isFinite(distanceMeters)) return "unknown";
+  if (distanceMeters <= 50) return "dekat";
+  if (distanceMeters <= warnAt) return "sedang";
+  return "jauh";
+}

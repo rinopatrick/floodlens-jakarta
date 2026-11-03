@@ -41,11 +41,14 @@ self.onmessage = (event) => {
   }
 
   const baseline = dijkstra(graph.adjacency, snap.nodeId);
-  const closed = ring ? closedSegmentsFor(graph.segments, ring) : new Set();
+  const { closed, zoneAreaM2 } = ring
+    ? closedSegmentsFor(graph.segments, ring)
+    : { closed: new Set(), zoneAreaM2: 0 };
   const scenario = dijkstra(graph.adjacency, snap.nodeId, closed);
   self.postMessage({
     type: "result",
     requestId,
+    zoneAreaM2,
     ...buildRenderPayload({
       snap,
       baseline,

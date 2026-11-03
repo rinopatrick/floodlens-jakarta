@@ -5,12 +5,13 @@ import { buildRenderPayload } from "../../public/src/analysis-payload.js";
 import { makeScenario } from "./scenario-fixture.js";
 
 test("worker and main thread share one render payload builder", () => {
-  const { graph, facilities, baseline, scenario, closed } = makeScenario();
+  const { graph, facilities, baseline, scenario, closed, zoneAreaM2 } = makeScenario();
   const payload = buildRenderPayload({
     snap: { coord: [0, 0], distance: 0 },
     baseline,
     scenario,
     closed,
+    zoneAreaM2,
     facilityList: facilities,
     nodes: graph.nodes,
     maxMeters: 5000,
@@ -20,6 +21,7 @@ test("worker and main thread share one render payload builder", () => {
   assert.equal(payload.summary.afterInRange, 3);
   assert.equal(payload.rows.length, 3);
   assert.equal(payload.closedSize, 1);
+  assert.equal(payload.zoneAreaM2, Math.round(zoneAreaM2));
   assert.ok(payload.baselinePath.length >= 2);
   assert.ok(payload.scenarioPath.length >= 2);
   assert.equal(typeof payload.summary.nearestBaseHospital.name, "string");

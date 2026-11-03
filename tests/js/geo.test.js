@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { distanceMeters, formatKm, isInsideBounds, pointInPolygon } from "../../public/src/geo.js";
+import { describeSnapQuality, distanceMeters, formatKm, isInsideBounds, pointInPolygon, ringAreaSquareMeters } from "../../public/src/geo.js";
 
 test("distanceMeters matches a known latitude step", () => {
   const distance = distanceMeters(
@@ -53,4 +53,22 @@ test("pointInPolygon handles a concave ring", () => {
   assert.equal(pointInPolygon([1, 2], ring), true);
   assert.equal(pointInPolygon([3, 2], ring), true);
   assert.equal(pointInPolygon([2, 2.1], ring), false);
+});
+
+test("ringAreaSquareMeters measures a small zone", () => {
+  const ring = [
+    { lat: -6.1995, lng: 106.8312 },
+    { lat: -6.2005, lng: 106.8312 },
+    { lat: -6.2005, lng: 106.8318 },
+    { lat: -6.1995, lng: 106.8318 },
+  ];
+
+  assert.ok(ringAreaSquareMeters(ring) > 1000);
+  assert.equal(ringAreaSquareMeters([]), 0);
+});
+
+test("describeSnapQuality labels near and far snaps", () => {
+  assert.equal(describeSnapQuality(10), "dekat");
+  assert.equal(describeSnapQuality(200), "sedang");
+  assert.equal(describeSnapQuality(900), "jauh");
 });
