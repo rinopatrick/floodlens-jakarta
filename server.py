@@ -18,11 +18,14 @@ from floodlens.config import (
     APP_VERSION,
     CONTENT_SECURITY_POLICY,
     EAST,
+    FLOOD_BROWSER_TTL,
     MAX_ACCESS_METERS,
     MAX_POLYGON_VERTICES,
     MAX_REQUEST_BYTES,
     MIN_POLYGON_AREA_M2,
     NORTH,
+    OSM_BROWSER_STALE_WHILE_REVALIDATE,
+    OSM_BROWSER_TTL,
     PUBLIC_DIR,
     SOUTH,
     WEST,
@@ -344,7 +347,10 @@ class Handler(SimpleHTTPRequestHandler):
                             cache=(
                                 "no-store"
                                 if refresh
-                                else "public, max-age=60, stale-while-revalidate=300"
+                                else (
+                                    f"public, max-age={OSM_BROWSER_TTL}, "
+                                    f"stale-while-revalidate={OSM_BROWSER_STALE_WHILE_REVALIDATE}"
+                                )
                             ),
                             etag=not refresh,
                             compress=True,
@@ -388,7 +394,7 @@ class Handler(SimpleHTTPRequestHandler):
                         self.send_bytes(
                             body,
                             "image/png",
-                            "public, max-age=3600",
+                            f"public, max-age={FLOOD_BROWSER_TTL}",
                             etag=True,
                             extra_headers=tuple(extra),
                         )
