@@ -82,7 +82,7 @@ Production notes:
 - Oversize request targets return 414. Polygon rings above the server `maxPolygonVertices` limit are rejected in the client with an inline map error.
 - `/api/osm` is gzip-compressed, sends an ETag, and allows a 60-second browser cache with stale-while-revalidate. The server cache remains 15 minutes.
 - Analysis, facility snapping, and pathfinding run in a module Web Worker. Facility and origin snaps use a grid spatial index with linear fallback. Road drawing is filtered to the map viewport and batched.
-- Set `FLOODLENS_HSTS=1` only behind HTTPS. The container image is digest-pinned; repin on base-image updates.
+- Set `FLOODLENS_HSTS=1` only behind HTTPS.
 - Map tiles are provided by Esri World Street Map; for a high-traffic or commercial deployment, use a licensed tile provider or self-hosted tiles. Automated tests must stub tile requests, not hit a public tile server.
 - Fonts, Leaflet, and Leaflet.draw are served locally. Only basemap tiles require a third-party provider.
 - Live upstream data changes over time. CI uses fixtures; run a manual live smoke test before a release.
