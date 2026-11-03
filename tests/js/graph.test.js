@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildGraph,
+  buildSpatialIndex,
   dijkstra,
   nearestNode,
   nearestNodeWithDistance,
@@ -98,4 +99,15 @@ test("nearestNodeWithDistance reports the snap distance and coordinate", () => {
   assert.ok(match.distance > 0);
   assert.deepEqual(match.coord, [0, 0.001]);
   assert.equal(nearestNodeWithDistance(new Map(), { lat: 0, lon: 0 }), null);
+});
+
+test("spatial index matches linear snap", () => {
+  const { nodes } = buildGraph(DATA);
+  const index = buildSpatialIndex(nodes, 0.001);
+  const point = { lat: 0, lon: 0.0011 };
+  const indexed = nearestNodeWithDistance(nodes, point, index);
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(indexed.nodeId, linear.nodeId);
+  assert.ok(Math.abs(indexed.distance - linear.distance) < 1e-6);
 });

@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = ROOT / "public"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 CONTACT_URL = os.environ.get(
     "FLOODLENS_CONTACT", "https://github.com/rinopatrick/floodlens-jakarta"
 )
@@ -32,7 +32,8 @@ CONTENT_SECURITY_POLICY = (
     "img-src 'self' data: blob: https://server.arcgisonline.com; "
     "connect-src 'self'; "
     "worker-src 'self'; "
-    "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+    "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; "
+    "upgrade-insecure-requests"
 )
 
 # The pilot window keeps the first data pull small enough for a local demo.
@@ -42,6 +43,8 @@ PILOT_BOUNDS = {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST}
 OSM_CACHE_TTL = 900
 FLOOD_CACHE_TTL = 3600
 MAX_ACCESS_METERS = 5000
+MAX_REQUEST_BYTES = 1_048_576
+MAX_POLYGON_VERTICES = 512
 
 
 @dataclass(frozen=True)
