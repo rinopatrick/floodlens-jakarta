@@ -41,10 +41,6 @@ class TTLCache(Generic[T]):
                 return self._entry.value
             return None
 
-    def get_stale(self) -> T | None:
-        with self._lock:
-            return self._entry.value if self._entry else None
-
     def set(self, value: T) -> None:
         with self._lock:
             self._entry = _Entry(self._clock(), value)

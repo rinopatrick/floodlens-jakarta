@@ -51,7 +51,7 @@ def test_force_refresh_bypasses_fresh_value():
     assert cache.get_or_fetch_with_staleness(
         lambda: next(values), force_refresh=True
     ) == (b"new", False)
-    assert cache.get_stale() == b"new"
+    assert cache.get_or_fetch_with_staleness(lambda: b"probe") == (b"new", False)
 
 
 def test_stale_value_is_served_when_fetch_fails():
@@ -121,3 +121,7 @@ def test_get_or_fetch_with_staleness_reports_fresh_success():
 
 def test_legacy_get_or_fetch_is_removed():
     assert not hasattr(TTLCache, "get_or_fetch")
+
+
+def test_legacy_get_stale_is_removed():
+    assert not hasattr(TTLCache, "get_stale")
