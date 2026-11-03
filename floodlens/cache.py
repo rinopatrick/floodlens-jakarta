@@ -79,26 +79,8 @@ class TTLCache(Generic[T]):
     ) -> tuple[T, bool]:
         with self._lock:
             fresh_hit = not force_refresh and self._fresh(self._entry)
-        if fresh_hit:
-            return self.get_or_fetch(fetch, force_refresh), False
-        stale_before = self.get_stale()
-        try:
-            value = self.get_or_fetch(fetch, force_refresh)
-        except Exception:
-            stale = self.get_stale()
-            if stale is not None:
-                return stale, True
-            raise
-        if stale_before is not None and value == stale_before:
-            return value, True
-        return value, False
-
-    def get_or_fetch(
-        self, fetch: Callable[[], T], force_refresh: bool = False
-    ) -> T:
-        with self._lock:
-            if not force_refresh and self._fresh(self._entry):
-                return self._entry.value
+            if fresh_hit:
+                return self._entry.value, False
             if self._inflight is None:
                 self._inflight = _Inflight()
                 slot = self._inflight
@@ -119,19 +101,19 @@ class TTLCache(Generic[T]):
                     self._inflight = None
                     stale = self._entry.value if self._entry else None
                 if stale is not None:
-                    return stale
+                    return stale, True
                 raise
             with self._lock:
                 slot.value = value
                 slot.event.set()
                 self._inflight = None
                 self._entry = _Entry(self._clock(), value)
-            return value
+            return value, False
 
         slot.event.wait()
         with self._lock:
             if slot.error is not None:
                 if self._entry is not None:
-                    return self._entry.value
+                    return self._entry.value, True
                 raise slot.error
-            return slot.value
+            return slot.value, False
