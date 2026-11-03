@@ -67,6 +67,30 @@ def test_osm_serves_stale_payload_with_header_when_upstream_fails(monkeypatch):
     assert response.getheader("X-Data-Stale") == "1"
 
 
+def test_flood_serves_stale_overlay_with_header_when_upstream_fails(monkeypatch):
+    import floodlens.flood as flood_module
+
+    stale = b"\x89PNG\r\n\x1a\nstale-overlay"
+    flood_module.FLOOD_CACHE.clear()
+    flood_module.FLOOD_CACHE.set(stale)
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(flood_module, "_fetch_flood_overlay", fail)
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+
+    try:
+        with running_server() as port:
+            response, body = get(port, "/api/flood")
+    finally:
+        flood_module.FLOOD_CACHE.clear()
+
+    assert response.status == 200
+    assert body == stale
+    assert response.getheader("X-Data-Stale") == "1"
+
+
 def test_config_endpoint_reports_live_mode(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
 
@@ -132,7 +156,7 @@ def test_osm_endpoint_reports_upstream_failure(monkeypatch):
 
 def test_flood_endpoint_returns_cached_png(monkeypatch):
     png = b"\x89PNG\r\n\x1a\nsynthetic"
-    monkeypatch.setattr(server, "fetch_flood_overlay", lambda: png)
+    monkeypatch.setattr(server, "fetch_flood_overlay_with_staleness", lambda: (png, False))
 
     with running_server() as port:
         response, body = get(port, "/api/flood")
@@ -147,7 +171,7 @@ def test_flood_endpoint_reports_upstream_failure(monkeypatch):
     def fail():
         raise RuntimeError("BNPB returned an unexpected map image response")
 
-    monkeypatch.setattr(server, "fetch_flood_overlay", fail)
+    monkeypatch.setattr(server, "fetch_flood_overlay_with_staleness", fail)
 
     with running_server() as port:
         response, body = get(port, "/api/flood")
@@ -190,7 +214,9 @@ def test_api_responses_carry_rate_limit_headers(monkeypatch):
         "fetch_osm_with_staleness",
         lambda _refresh=False: (b'{"roads":[],"facilities":[]}', False),
     )
-    monkeypatch.setattr(server, "fetch_flood_overlay", lambda: b"\x89PNG\r\n\x1a\n")
+    monkeypatch.setattr(
+        server, "fetch_flood_overlay_with_staleness", lambda: (b"\x89PNG\r\n\x1a\n", False)
+    )
 
     with running_server() as port:
         osm, _ = get(port, "/api/osm")

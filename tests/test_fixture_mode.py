@@ -46,10 +46,13 @@ def test_fixture_config_reports_fixture_mode(monkeypatch):
 
 def test_fixture_osm_never_calls_upstream(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", FIXTURES)
-    def fail(*_args):
+
+    def fail(*_args, **_kwargs):
         raise AssertionError("upstream")
 
-    monkeypatch.setattr(server, "fetch_osm_with_staleness", fail)
+    import floodlens.osm as osm_module
+
+    monkeypatch.setattr(osm_module, "urlopen", fail)
 
     with running_server() as port:
         response, body = get(port, "/api/osm?refresh=1")
@@ -63,11 +66,13 @@ def test_fixture_osm_never_calls_upstream(monkeypatch):
 
 def test_fixture_flood_never_calls_upstream(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", FIXTURES)
-    monkeypatch.setattr(
-        server,
-        "fetch_flood_overlay",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("upstream")),
-    )
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("upstream")
+
+    import floodlens.flood as flood_module
+
+    monkeypatch.setattr(flood_module, "urlopen", fail)
 
     with running_server() as port:
         response, body = get(port, "/api/flood")
