@@ -198,10 +198,6 @@ def simplify_osm(payload: dict) -> bytes:
     ).encode("utf-8")
 
 
-def fetch_osm(force_refresh: bool = False) -> bytes:
-    return OSM_CACHE.get_or_fetch(_fetch_osm_from_upstream, force_refresh)
-
-
 def fetch_osm_with_staleness(force_refresh: bool = False) -> tuple[bytes, bool]:
     return OSM_CACHE.get_or_fetch_with_staleness(_fetch_osm_from_upstream, force_refresh)
 

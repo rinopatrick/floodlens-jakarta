@@ -12,6 +12,12 @@ def simplified():
     return json.loads(simplify_osm(FIXTURE))
 
 
+def test_legacy_fetch_wrapper_is_removed():
+    import floodlens.osm as osm_module
+
+    assert not hasattr(osm_module, "fetch_osm")
+
+
 def test_query_covers_pilot_bbox_and_road_classes():
     query = overpass_query()
     assert "-6.26,106.78,-6.14,106.89" in query

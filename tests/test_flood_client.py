@@ -43,7 +43,7 @@ def test_returns_png_and_requests_pilot_bbox(monkeypatch):
     body = b"\x89PNG\r\n\x1a\nsynthetic"
     captured = install_response(monkeypatch, body, "image/png")
 
-    assert flood.fetch_flood_overlay() == body
+    assert flood.fetch_flood_overlay_with_staleness()[0] == body
     assert "bbox=106.73%2C-6.31%2C106.94%2C-6.09" in captured["url"]
     assert "layers=show%3A0" in captured["url"]
     assert captured["timeout"] == 35
@@ -53,11 +53,11 @@ def test_returns_png_and_requests_pilot_bbox(monkeypatch):
 def test_cached_overlay_is_reused_until_refresh(monkeypatch):
     captured = install_response(monkeypatch, b"\x89PNG\r\n\x1a\nsynthetic", "image/png")
 
-    flood.fetch_flood_overlay()
-    flood.fetch_flood_overlay()
+    flood.fetch_flood_overlay_with_staleness()[0]
+    flood.fetch_flood_overlay_with_staleness()[0]
     assert captured["calls"] == 1
 
-    flood.fetch_flood_overlay(force_refresh=True)
+    flood.fetch_flood_overlay_with_staleness(force_refresh=True)[0]
     assert captured["calls"] == 2
 
 
@@ -65,14 +65,14 @@ def test_rejects_html_response(monkeypatch):
     install_response(monkeypatch, b"<html>maintenance</html>", "text/html")
 
     with pytest.raises(RuntimeError, match="unexpected map image"):
-        flood.fetch_flood_overlay()
+        flood.fetch_flood_overlay_with_staleness()[0]
 
 
 def test_rejects_non_png_body(monkeypatch):
     install_response(monkeypatch, b"not a png", "image/png")
 
     with pytest.raises(RuntimeError, match="unexpected map image"):
-        flood.fetch_flood_overlay()
+        flood.fetch_flood_overlay_with_staleness()[0]
 
 
 def test_timeout_propagates(monkeypatch):
@@ -82,4 +82,23 @@ def test_timeout_propagates(monkeypatch):
     monkeypatch.setattr(flood, "urlopen", fake_urlopen)
 
     with pytest.raises(TimeoutError):
-        flood.fetch_flood_overlay()
+        flood.fetch_flood_overlay_with_staleness()[0]
+
+
+def test_legacy_fetch_wrapper_is_removed():
+    assert not hasattr(flood, "fetch_flood_overlay")
+
+
+def test_with_staleness_reports_stale_after_failure(monkeypatch):
+    body = b"\x89PNG\r\n\x1a\nsynthetic"
+    install_response(monkeypatch, body, "image/png")
+
+    assert flood.fetch_flood_overlay_with_staleness() == (body, False)
+
+    def fail(_request, _timeout):
+        raise TimeoutError("down")
+
+    monkeypatch.setattr(flood, "urlopen", fail)
+    flood.FLOOD_CACHE._ttl = 0
+
+    assert flood.fetch_flood_overlay_with_staleness() == (body, True)
