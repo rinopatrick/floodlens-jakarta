@@ -373,8 +373,16 @@ class Handler(SimpleHTTPRequestHandler):
                         )
                     else:
                         refresh = "refresh=1" in parsed.query
-                        body, stale = fetch_flood_overlay_with_staleness(refresh)
                         extra = list(self._rate_limit_headers(parsed.path))
+                        if refresh:
+                            allowed, retry = self.refresh_cooldown.allow(
+                                self._client_key()
+                            )
+                            if not allowed:
+                                refresh = False
+                                extra.append(("X-Refresh", "cooldown"))
+                                extra.append(("X-Refresh-Retry-After", str(retry)))
+                        body, stale = fetch_flood_overlay_with_staleness(refresh)
                         if stale:
                             extra.append(("X-Data-Stale", "1"))
                         self.send_bytes(
