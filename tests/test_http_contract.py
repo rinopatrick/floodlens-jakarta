@@ -280,3 +280,50 @@ def test_flood_refresh_cooldown_blocks_second_refresh(monkeypatch):
     assert second.status == 200
     assert second.getheader("X-Refresh") == "cooldown"
     assert second.getheader("X-Refresh-Retry-After") is not None
+
+
+def test_osm_refresh_cooldown_blocks_second_refresh(monkeypatch):
+    from floodlens.limits import Cooldown
+
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    monkeypatch.setattr(server.Handler, "refresh_cooldown", Cooldown(seconds=30))
+    monkeypatch.setattr(
+        server,
+        "fetch_osm_with_staleness",
+        lambda _refresh=False: (b'{"roads":[],"facilities":[]}', False),
+    )
+
+    with running_server() as port:
+        first, _ = get(port, "/api/osm?refresh=1")
+        second, _ = get(port, "/api/osm?refresh=1")
+
+    assert first.status == 200
+    assert first.getheader("X-Refresh") is None
+    assert second.status == 200
+    assert second.getheader("X-Refresh") == "cooldown"
+    assert second.getheader("X-Refresh-Retry-After") is not None
+
+
+
+def test_refresh_cooldown_is_scoped_per_route(monkeypatch):
+    from floodlens.limits import Cooldown
+
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    monkeypatch.setattr(server.Handler, "refresh_cooldown", Cooldown(seconds=30))
+    monkeypatch.setattr(
+        server,
+        "fetch_osm_with_staleness",
+        lambda _refresh=False: (b'{"roads":[],"facilities":[]}', False),
+    )
+    monkeypatch.setattr(
+        server,
+        "fetch_flood_overlay_with_staleness",
+        lambda _refresh=False: (b"\x89PNG\r\n\x1a\n", False),
+    )
+
+    with running_server() as port:
+        _, _ = get(port, "/api/osm?refresh=1")
+        flood, _ = get(port, "/api/flood?refresh=1")
+
+    assert flood.status == 200
+    assert flood.getheader("X-Refresh") is None

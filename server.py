@@ -199,6 +199,18 @@ class Handler(SimpleHTTPRequestHandler):
             headers.append(("Retry-After", str(retry)))
         return headers
 
+    def _refresh_guard(self, path: str, refresh: bool) -> tuple[bool, list[tuple[str, str]]]:
+        headers: list[tuple[str, str]] = []
+        if not refresh:
+            return False, headers
+        allowed, retry = self.refresh_cooldown.allow(f"{self._client_key()}:{path}")
+        if allowed:
+            return True, headers
+        return False, [
+            ("X-Refresh", "cooldown"),
+            ("X-Refresh-Retry-After", str(retry)),
+        ]
+
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
@@ -314,14 +326,8 @@ class Handler(SimpleHTTPRequestHandler):
                     else:
                         refresh = "refresh=1" in parsed.query
                         headers: list[tuple[str, str]] = list(self._rate_limit_headers(parsed.path))
-                        if refresh:
-                            allowed, retry = self.refresh_cooldown.allow(
-                                self._client_key()
-                            )
-                            if not allowed:
-                                refresh = False
-                                headers.append(("X-Refresh", "cooldown"))
-                                headers.append(("X-Refresh-Retry-After", str(retry)))
+                        refresh, guard_headers = self._refresh_guard(parsed.path, refresh)
+                        headers.extend(guard_headers)
                         body, stale = fetch_osm_with_staleness(refresh)
                         payload = json.loads(body)
                         timestamp = payload.get("dataTimestamp", "")
@@ -374,14 +380,8 @@ class Handler(SimpleHTTPRequestHandler):
                     else:
                         refresh = "refresh=1" in parsed.query
                         extra = list(self._rate_limit_headers(parsed.path))
-                        if refresh:
-                            allowed, retry = self.refresh_cooldown.allow(
-                                self._client_key()
-                            )
-                            if not allowed:
-                                refresh = False
-                                extra.append(("X-Refresh", "cooldown"))
-                                extra.append(("X-Refresh-Retry-After", str(retry)))
+                        refresh, guard_headers = self._refresh_guard(parsed.path, refresh)
+                        extra.extend(guard_headers)
                         body, stale = fetch_flood_overlay_with_staleness(refresh)
                         if stale:
                             extra.append(("X-Data-Stale", "1"))
