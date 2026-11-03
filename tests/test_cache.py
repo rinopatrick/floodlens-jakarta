@@ -91,3 +91,23 @@ def test_concurrent_callers_share_one_fetch():
     assert [future.result() for future in futures] == [b"value"] * 4
     assert calls == 1
     assert release.is_set()
+
+
+def test_get_or_fetch_with_staleness_reports_stale_fallback():
+    clock = FakeClock()
+    cache = TTLCache(10, clock)
+
+    assert cache.get_or_fetch_with_staleness(lambda: b"fresh") == (b"fresh", False)
+    clock.advance(60)
+
+    def fail():
+        raise RuntimeError("upstream down")
+
+    assert cache.get_or_fetch_with_staleness(fail) == (b"fresh", True)
+
+
+def test_get_or_fetch_with_staleness_reports_fresh_success():
+    cache = TTLCache(10, FakeClock())
+
+    assert cache.get_or_fetch_with_staleness(lambda: b"v1") == (b"v1", False)
+    assert cache.get_or_fetch_with_staleness(lambda: b"v2") == (b"v1", False)

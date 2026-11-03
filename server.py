@@ -372,7 +372,8 @@ class Handler(SimpleHTTPRequestHandler):
                             etag=True,
                         )
                     else:
-                        body, stale = fetch_flood_overlay_with_staleness()
+                        refresh = "refresh=1" in parsed.query
+                        body, stale = fetch_flood_overlay_with_staleness(refresh)
                         extra = list(self._rate_limit_headers(parsed.path))
                         if stale:
                             extra.append(("X-Data-Stale", "1"))

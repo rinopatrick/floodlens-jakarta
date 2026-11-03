@@ -74,6 +74,25 @@ class TTLCache(Generic[T]):
             "inflight": inflight,
         }
 
+    def get_or_fetch_with_staleness(
+        self, fetch: Callable[[], T], force_refresh: bool = False
+    ) -> tuple[T, bool]:
+        with self._lock:
+            fresh_hit = not force_refresh and self._fresh(self._entry)
+        if fresh_hit:
+            return self.get_or_fetch(fetch, force_refresh), False
+        stale_before = self.get_stale()
+        try:
+            value = self.get_or_fetch(fetch, force_refresh)
+        except Exception:
+            stale = self.get_stale()
+            if stale is not None:
+                return stale, True
+            raise
+        if stale_before is not None and value == stale_before:
+            return value, True
+        return value, False
+
     def get_or_fetch(
         self, fetch: Callable[[], T], force_refresh: bool = False
     ) -> T:
