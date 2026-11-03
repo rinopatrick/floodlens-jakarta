@@ -333,3 +333,31 @@ def test_refresh_cooldown_is_scoped_per_route(monkeypatch):
 
     assert flood.status == 200
     assert flood.getheader("X-Refresh") is None
+
+
+def test_api_response_prelude_is_shared_between_osm_and_flood(monkeypatch):
+    from floodlens.limits import Cooldown, RateLimiter
+
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    monkeypatch.setattr(server.Handler, "refresh_cooldown", Cooldown(seconds=30))
+    monkeypatch.setattr(server.Handler, "api_limiter", RateLimiter(120, 60))
+    seen = {}
+
+    def fake_fetch_osm(refresh=False):
+        seen["osm_refresh"] = refresh
+        return b'{"roads":[],"facilities":[]}', False
+
+    def fake_fetch_flood(refresh=False):
+        seen["flood_refresh"] = refresh
+        return b"\x89PNG\r\n\x1a\n", False
+
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", fake_fetch_osm)
+    monkeypatch.setattr(server, "fetch_flood_overlay_with_staleness", fake_fetch_flood)
+
+    with running_server() as port:
+        osm, _ = get(port, "/api/osm?refresh=1")
+        flood, _ = get(port, "/api/flood?refresh=1")
+
+    assert osm.getheader("X-RateLimit-Limit") == flood.getheader("X-RateLimit-Limit")
+    assert osm.getheader("X-Data-Stale") == flood.getheader("X-Data-Stale")
+    assert seen == {"osm_refresh": True, "flood_refresh": True}

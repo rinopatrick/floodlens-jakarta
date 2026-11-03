@@ -214,6 +214,12 @@ class Handler(SimpleHTTPRequestHandler):
             ("X-Refresh-Retry-After", str(retry)),
         ]
 
+    def _api_prelude(self, path: str, query: str) -> tuple[bool, list[tuple[str, str]]]:
+        headers = list(self._rate_limit_headers(path))
+        refresh, guard_headers = self._refresh_guard(path, "refresh=1" in query)
+        headers.extend(guard_headers)
+        return refresh, headers
+
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
@@ -327,10 +333,7 @@ class Handler(SimpleHTTPRequestHandler):
                             cache="no-store",
                         )
                     else:
-                        refresh = "refresh=1" in parsed.query
-                        headers: list[tuple[str, str]] = list(self._rate_limit_headers(parsed.path))
-                        refresh, guard_headers = self._refresh_guard(parsed.path, refresh)
-                        headers.extend(guard_headers)
+                        refresh, headers = self._api_prelude(parsed.path, parsed.query)
                         body, stale = fetch_osm_with_staleness(refresh)
                         payload = json.loads(body)
                         timestamp = payload.get("dataTimestamp", "")
@@ -384,10 +387,7 @@ class Handler(SimpleHTTPRequestHandler):
                             etag=True,
                         )
                     else:
-                        refresh = "refresh=1" in parsed.query
-                        extra = list(self._rate_limit_headers(parsed.path))
-                        refresh, guard_headers = self._refresh_guard(parsed.path, refresh)
-                        extra.extend(guard_headers)
+                        refresh, extra = self._api_prelude(parsed.path, parsed.query)
                         body, stale = fetch_flood_overlay_with_staleness(refresh)
                         if stale:
                             extra.append(("X-Data-Stale", "1"))
