@@ -131,6 +131,43 @@ test("indexed snap finds the closer node across a cell boundary", () => {
   assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
 });
 
+test("indexed snap skips distant nodes once the closest node is proven", (t) => {
+  const nodes = largeGraph([["nearby", [-6.205, 106.835]]], [-6.155, 106.885]);
+  const point = { lat: -6.205, lon: 106.835 };
+  const index = buildSpatialIndex(nodes);
+  const expected = nearestNodeWithDistance(nodes, point);
+  const iterations = t.mock.method(nodes, Symbol.iterator);
+  const lookups = t.mock.method(nodes, "get");
+
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, index), expected);
+  assert.equal(iterations.mock.callCount(), 0, "indexed snap should not scan all nodes");
+  assert.ok(lookups.mock.callCount() < nodes.size, "indexed snap should prune distant nodes");
+});
+
+test("indexed snap accounts for shorter longitude distances at high latitudes", () => {
+  const nodes = largeGraph([
+    ["same-cell", [80.00608, 0.005]],
+    ["adjacent-cell", [80.005, 0.01001]],
+  ], [81, 1]);
+  const point = { lat: 80.005, lon: 0.005 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "adjacent-cell");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap stays exact across the antimeridian", () => {
+  const nodes = largeGraph([
+    ["same-cell", [0, 179.991]],
+    ["across-meridian", [0, -179.999]],
+  ], [1, 179]);
+  const point = { lat: 0, lon: 179.999 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "across-meridian");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
 test("indexed snap returns null for an empty graph", () => {
   const nodes = new Map();
   assert.equal(nearestNodeWithDistance(nodes, { lat: 0, lon: 0 }, buildSpatialIndex(nodes)), null);

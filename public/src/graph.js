@@ -46,16 +46,90 @@ export function buildGraph(data) {
 
 export function buildSpatialIndex(nodes, cellDegrees = 0.01) {
   const cells = new Map();
-  const key = (lat, lon) => `${Math.floor(lat / cellDegrees)}:${Math.floor(lon / cellDegrees)}`;
-  for (const [nodeId, coord] of nodes) {
-    const cell = key(coord[0], coord[1]);
+  const order = new Map();
+  let south = Infinity;
+  let north = -Infinity;
+  let west = Infinity;
+  let east = -Infinity;
+  for (const [nodeId, [lat, lon]] of nodes) {
+    const cell = `${Math.floor(lat / cellDegrees)}:${Math.floor(lon / cellDegrees)}`;
     if (!cells.has(cell)) cells.set(cell, []);
     cells.get(cell).push(nodeId);
+    order.set(nodeId, order.size);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+    west = Math.min(west, lon);
+    east = Math.max(east, lon);
   }
-  return { cells, cellDegrees };
+  return { nodes, cells, cellDegrees, order, bounds: { south, north, west, east } };
+}
+
+const CELL_EDGE_PADDING = 1e-9;
+
+function distanceOutsideCells(point, baseLat, baseLon, ring, cellDegrees, maxAbsLat) {
+  const latGap = Math.max(0, Math.min(
+    point.lat - (baseLat - ring) * cellDegrees,
+    (baseLat + ring + 1) * cellDegrees - point.lat,
+  ) - CELL_EDGE_PADDING);
+  const lonGap = Math.max(0, Math.min(
+    point.lon - (baseLon - ring) * cellDegrees,
+    (baseLon + ring + 1) * cellDegrees - point.lon,
+  ) - CELL_EDGE_PADDING);
+
+  // Either latitude or longitude is outside. Drop the other term in
+  // haversine; the most poleward latitude minimizes both longitude factors.
+  return Math.min(
+    distanceMeters({ lat: 0, lon: 0 }, { lat: latGap, lon: 0 }),
+    distanceMeters({ lat: maxAbsLat, lon: 0 }, { lat: maxAbsLat, lon: lonGap }),
+  );
+}
+
+function nearestIndexedNode(nodes, point, index) {
+  const { cells, cellDegrees, order, bounds } = index;
+  const { south, north, west, east } = bounds;
+  const maxAbsLat = Math.max(Math.abs(point.lat), Math.abs(south), Math.abs(north));
+  const maxLatGap = Math.max(Math.abs(point.lat - south), Math.abs(point.lat - north));
+  const maxLonGap = Math.max(Math.abs(point.lon - west), Math.abs(point.lon - east));
+  // Use the grid only where longitude differences cannot wrap and
+  // haversine distances stay well away from antipodal rounding.
+  if (!(maxAbsLat <= 90 && Math.max(Math.abs(point.lon), Math.abs(west), Math.abs(east)) <= 180
+    && maxLatGap + maxLonGap <= 90
+    && cellDegrees >= CELL_EDGE_PADDING && cellDegrees <= 90)) return null;
+
+  const baseLat = Math.floor(point.lat / cellDegrees);
+  const baseLon = Math.floor(point.lon / cellDegrees);
+  let best = null;
+  let remaining = cells.size;
+  for (let ring = 0; ring < 10; ring++) {
+    for (let dLat = -ring; dLat <= ring; dLat++) {
+      for (let dLon = -ring; dLon <= ring; dLon++) {
+        if (Math.max(Math.abs(dLat), Math.abs(dLon)) !== ring) continue;
+        const bucket = cells.get(`${baseLat + dLat}:${baseLon + dLon}`);
+        if (!bucket) continue;
+        remaining--;
+        for (const nodeId of bucket) {
+          const coord = nodes.get(nodeId);
+          const distance = distanceMeters(point, { lat: coord[0], lon: coord[1] });
+          if (!best || distance < best.distance
+            || (distance === best.distance && order.get(nodeId) < order.get(best.nodeId))) {
+            best = { nodeId, distance, coord };
+          }
+        }
+      }
+    }
+    if (remaining === 0 || (best
+      && best.distance < distanceOutsideCells(point, baseLat, baseLon, ring, cellDegrees, maxAbsLat))) {
+      return best;
+    }
+  }
+  return null;
 }
 
 export function nearestNodeWithDistance(nodes, point, index = null) {
+  if (index?.nodes === nodes && index.order.size === nodes.size && nodes.size > 500) {
+    const match = nearestIndexedNode(nodes, point, index);
+    if (match) return match;
+  }
   let best = null;
   for (const [nodeId, candidate] of nodes) {
     const distance = distanceMeters(point, {
