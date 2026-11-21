@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from floodlens import osm
 from floodlens.osm import overpass_query, simplify_osm
 
 FIXTURE = json.loads(
@@ -12,6 +13,39 @@ FIXTURE = json.loads(
 
 def simplified():
     return json.loads(simplify_osm(FIXTURE))
+
+
+def test_missing_elements_is_invalid():
+    with pytest.raises(osm.InvalidOverpassResponse, match="elements"):
+        simplify_osm({})
+
+
+@pytest.mark.parametrize("elements", [None, {}, "", 42])
+def test_non_list_elements_is_invalid(elements):
+    with pytest.raises(osm.InvalidOverpassResponse, match="elements"):
+        simplify_osm({"elements": elements})
+
+
+@pytest.mark.parametrize(
+    "remark", ["runtime error: Query timed out", "Query timed out", "RUNTIME ERROR: out of memory"]
+)
+def test_error_remark_with_elements_is_invalid(remark):
+    with pytest.raises(osm.InvalidOverpassResponse, match="remark"):
+        simplify_osm({"elements": [], "remark": remark})
+
+
+@pytest.mark.parametrize(
+    "payload", [{"elements": []}, {"elements": [], "remark": "informational note"}]
+)
+def test_legitimate_empty_elements_is_accepted(payload):
+    result = json.loads(simplify_osm(payload))
+    assert result["roads"] == []
+    assert result["facilities"] == []
+
+
+def test_runtime_error_envelope_is_invalid():
+    with pytest.raises(osm.InvalidOverpassResponse):
+        simplify_osm({"remark": "runtime error: Query timed out"})
 
 
 def test_legacy_fetch_wrapper_is_removed():
