@@ -69,36 +69,50 @@ The Playwright suite starts the server in fixture mode. It never calls live Over
 Reproduce with Node 22 and the Python virtual environment on `PATH`:
 
 ```sh
-npx playwright test e2e/roads.spec.js -g 'large fixture'
-ROAD_BASELINE=1 npx playwright test e2e/roads.spec.js -g 'large fixture'
+node scripts/benchmark-roads.mjs --app-ref 2325e0195f1484a1145dbd42680b7cb7bfc5e462
+node scripts/benchmark-roads.mjs
+node scripts/benchmark-roads.mjs --live
 ```
 
-The baseline mode serves `master:public/src/app.js` with timing instrumentation only;
-run it while `master` still points at the pre-fix version. The test generates 1,600
-two-point residential roads in addition to the 10 sample roads (1,610 total),
-all eligible and initially visible. It then moves to `[-6.20, 106.8302]`, zoom 19,
-where over 1,600 roads intersect the viewport, and checks supersession with six
-rapid movements to a final empty viewport. No upstream services are used.
+The script starts its own server on port 8768 and compares an explicit immutable
+pre-review-fix commit with the working tree; the behaviour specs never read git
+refs. `scripts/road-fixture.mjs` generates 20,000 eligible two-point roads: the
+10 sample roads, 19,790 spread across the pilot bounds, and 200 near the origin.
+The same fixture powers the under-1-second pan and cancellation regressions.
+Synthetic runs stub OSM and tiles; `--live` starts without a fixture directory
+and loads the actual `/api/osm` response instead.
 
 Measured on Ubuntu, headless Playwright Chromium 156.0.8078.4, viewport 1280×720,
 without CPU throttling (single run, not a statistical benchmark):
 
-| Measurement | Before (`master`) | After |
+| Measurement | Before (`2325e01`) | After |
 | --- | --- | --- |
-| Settled movement to completed redraw | No redraw; still stale after 1,000 ms | 307.6 ms |
-| Longest observed main-thread long task, load through movement | 0 ms | 0 ms |
-| Initial synchronous road-draw duration | 15.6 ms | Not synchronous |
+| Zoom 19, 50 px pan: redraw latency | 3,312.7 ms | 0.1 ms |
+| Zoom 19: longest long task | 0 ms | 0 ms |
+| Auto-fit zoom 12, all 20,000 visible: redraw latency | 3,329.1 ms | 129.1 ms |
+| Auto-fit: longest long task | 0 ms | 0 ms |
+
+At street level 216 roads intersect the actual viewport. Before, 216 layers are
+rebuilt; after, 236 layers are retained in the padded viewport. The 50 px pan
+fits inside that padding and skips layer work. Auto-fit expands from the street
+view to all 20,000 roads and exercises time-budgeted additions. Zoom changes
+always recull, even inside the previous padded bounds, to avoid retaining the
+entire pilot network when zooming in.
 
 Zero means the `PerformanceObserver` saw no task at or above its 50 ms reporting
-threshold, not that rendering took no time. There is no valid pre-fix redraw
-latency: movement never invoked road drawing. The baseline assertion explicitly
-checks the stale 1,610-layer overlay rather than treating inactivity as a fast
-redraw. After-fix timing starts before `moveend` dispatch and ends at the
-`roads:rendered` event after the last batch (layer completion, not tile loading or
-final canvas paint). Browser timers must run during that redraw. Batches scan at
-most 100 roads or approximately 8 ms of work, then yield through an animation
-frame and timer; a generation token prevents superseded work from adding layers.
-These measurements show correctness and responsiveness, not a measured speedup.
+threshold, not that rendering took no time. Latency starts before `moveend`
+dispatch and ends at `roads:rendered` (layer completion, not tile loading).
+The long-task observation window includes two subsequent animation frames to
+include canvas painting. Eligible geometry, bboxes and styles are prepared once
+per load; uncached redraws synchronously bbox-reject and segment-clip candidates.
+Only layer additions/removals yield at an approximately 8 ms budget. Kept road
+layers retain their identity, and generation checks discard superseded work.
+
+Live Central Jakarta attempt: the non-fixture server returned HTTP 502 with
+`upstream_unavailable` / `Sumber data OpenStreetMap tidak tersedia. Coba lagi
+beberapa saat.` Overpass was unavailable from this environment, so no live road
+count or live timings could be measured; the 20k synthetic results are not
+presented as a live-data benchmark.
 
 ## Deploy
 
