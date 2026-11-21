@@ -83,7 +83,8 @@ function isInsidePilot(lat, lon) {
       if (!bounds || ![bounds.south, bounds.west, bounds.north, bounds.east].every(Number.isFinite)
         || bounds.south < -90 || bounds.north > 90 || bounds.south >= bounds.north
         || bounds.west < -180 || bounds.east > 180 || bounds.west >= bounds.east) return;
-      hazardOverlay = L.imageOverlay("/api/flood", [[bounds.south, bounds.west], [bounds.north, bounds.east]], { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
+      const query = new URLSearchParams({ bbox: [bounds.west, bounds.south, bounds.east, bounds.north].join(",") });
+      hazardOverlay = L.imageOverlay(`/api/flood?${query}`, [[bounds.south, bounds.west], [bounds.north, bounds.east]], { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
       hazardOverlay.on("load", () => {
         if ($("app").dataset.fixture === "true") return;
         setSourceState("bnpbState", "LAYER AKTIF", "ready");

@@ -25,6 +25,32 @@ test("hazard overlay uses server flood bounds in Leaflet order", async ({ page }
   expect(bounds).toEqual([[-6.32, 106.72], [-6.08, 106.95]]);
 });
 
+test("hazard image URL changes with the configured extent", async ({ page }) => {
+  const imageUrls = [];
+  for (const floodBounds of [
+    { south: -6.31, west: 106.73, north: -6.09, east: 106.94 },
+    { south: -6.32, west: 106.72, north: -6.08, east: 106.95 },
+  ]) {
+    await page.route("**/api/config", (route) => route.fulfill({ json: {
+      fixtureMode: false, floodBounds,
+    } }));
+    const responsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/flood",
+    );
+    await page.goto("/");
+    const response = await responsePromise;
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toBe("image/png");
+    imageUrls.push(new URL(response.url()));
+    await page.unroute("**/api/config");
+  }
+  expect(imageUrls.map((url) => url.searchParams.get("bbox"))).toEqual([
+    "106.73,-6.31,106.94,-6.09",
+    "106.72,-6.32,106.95,-6.08",
+  ]);
+  expect(imageUrls[0].href).not.toBe(imageUrls[1].href);
+});
+
 for (const [name, floodBounds] of [
   ["missing", undefined],
   ["null", null],
