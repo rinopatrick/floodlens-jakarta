@@ -116,6 +116,22 @@ for (const layout of layouts) {
   test.describe(layout.name, () => {
     test.use({ viewport: { width: layout.width, height: layout.height } });
 
+    test("map marker and polygon edit targets are at least 44px", async ({ page }) => {
+      await enterState(page, "result");
+      await expect(page.locator(".health-pin").first()).toBeAttached();
+      for (const marker of await page.locator(".leaflet-marker-icon:has(.health-pin), .leaflet-marker-icon:has(.origin-pin)").all()) {
+        await targetSize(marker);
+      }
+      await page.locator(".leaflet-draw-edit-edit").click();
+      const handles = page.locator(".leaflet-marker-draggable");
+      await expect(handles.first()).toBeAttached();
+      for (const handle of await handles.all()) await targetSize(handle);
+      await page.evaluate(() => window.floodlensMap.setZoom(14, { animate: false }));
+      const clusters = page.locator(".facility-cluster-icon");
+      await expect(clusters.first()).toBeAttached();
+      for (const cluster of await clusters.all()) await targetSize(cluster);
+    });
+
     test("loading cancel has a 44px target and visible keyboard focus", async ({ page }) => {
       await enterState(page, "empty");
       await page.route("**/api/osm**", () => {});
