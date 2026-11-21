@@ -130,10 +130,12 @@ def _process_road(element: dict, roads: list[dict]) -> None:
     if not isinstance(tags, dict):
         return
     highway = tags.get("highway")
+    way_id = element.get("id")
     nodes = element.get("nodes")
     geometry = element.get("geometry")
     if (
         element.get("type") != "way"
+        or type(way_id) is not int
         or highway not in ALLOWED_ROADS
         or not isinstance(nodes, list)
         or not isinstance(geometry, list)
@@ -143,27 +145,34 @@ def _process_road(element: dict, roads: list[dict]) -> None:
         or tags.get("motor_vehicle") in {"no", "private"}
     ):
         return
-    # shortcut: a node/geometry length mismatch means the way shape is
-    # untrustworthy; skip it instead of failing the whole payload.
+    runs = []
     points = []
     for node_id, point in zip(nodes, geometry, strict=True):
-        coords = _as_point(point)
+        try:
+            coords = _as_point(point)
+        except OverflowError:
+            coords = None
         if coords is None:
+            if len(points) >= 2:
+                runs.append(points)
+            points = []
             continue
         points.append({"id": str(node_id), "lat": coords[0], "lon": coords[1]})
-    if len(points) < 2:
-        return
-    roads.append(
-        {
-            "id": str(element.get("id")),
-            "name": tags.get("name", "") if isinstance(tags.get("name", ""), str) else "",
-            "kind": highway,
-            "oneway": tags.get(
-                "oneway", "yes" if tags.get("junction") == "roundabout" else "no"
-            ),
-            "points": points,
-        }
-    )
+    if len(points) >= 2:
+        runs.append(points)
+
+    for index, run in enumerate(runs):
+        roads.append(
+            {
+                "id": str(way_id) if len(run) == len(nodes) else f"{way_id}.{index}",
+                "name": tags.get("name", "") if isinstance(tags.get("name", ""), str) else "",
+                "kind": highway,
+                "oneway": tags.get(
+                    "oneway", "yes" if tags.get("junction") == "roundabout" else "no"
+                ),
+                "points": run,
+            }
+        )
 
 
 def simplify_osm(payload: dict) -> bytes:
