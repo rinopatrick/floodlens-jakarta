@@ -48,12 +48,12 @@ self.onmessage = (event) => {
   self.postMessage({
     type: "result",
     requestId,
-    zoneAreaM2,
     ...buildRenderPayload({
       snap,
       baseline,
       scenario,
       closed,
+      zoneAreaM2,
       facilityList: facilities,
       nodes: graph.nodes,
       maxMeters: maxAccessMeters,

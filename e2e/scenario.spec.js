@@ -113,6 +113,7 @@ test("scenario closes the bridge and reduces health access", async ({ page }) =>
   await expect(page.locator("#resultNote")).toContainText(
     "segmen jalan masuk zona",
   );
+  await expect(page.locator("#resultNote")).toContainText("Zona 0,01 km².");
   await expect(page.locator("#facilityList .facility-row")).toHaveCount(3);
   expect(externalRequests).toEqual([]);
   expect(consoleErrors).toEqual([]);
