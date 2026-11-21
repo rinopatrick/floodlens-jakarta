@@ -32,7 +32,14 @@ test("short mobile error keeps inspector controls reachable", async ({ page }) =
   }
 });
 
-async function enterState(page, state) {
+async function enterState(page, state, { bnpb = false } = {}) {
+  if (bnpb) {
+    await page.route("**/api/config", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ json: { ...await response.json(), fixtureMode: false } });
+    });
+    await page.route("**/api/flood", (route) => route.fulfill({ contentType: "image/png", body: tile }));
+  }
   await page.route(/https:\/\/server\.arcgisonline\.com\/.*/, (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: tile }),
   );
@@ -68,6 +75,23 @@ async function enterState(page, state) {
   }
   await expect(page.locator("#app")).toHaveAttribute("data-state", state);
   await expect(page.locator(".leaflet-tile-loaded").first()).toBeVisible();
+}
+
+for (const height of [844, 824]) {
+  test(`BNPB result leaves map controls hittable at 390x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height });
+    await enterState(page, "result", { bnpb: true });
+    await expect(page.locator(".hazard-block")).toBeVisible();
+    for (const control of await page.locator(".leaflet-draw-toolbar a, .leaflet-control-zoom a").all()) {
+      expect.soft(await control.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      }), await control.getAttribute("title")).toBe(true);
+    }
+    if (height === 844 && process.env.RESPONSIVE_SCREENSHOTS) {
+      await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/portrait-result-bnpb.png` });
+    }
+  });
 }
 
 async function targetSize(locator) {
