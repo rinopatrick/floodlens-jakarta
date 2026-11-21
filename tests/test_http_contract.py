@@ -40,10 +40,10 @@ def get(port, path, headers=None, *, timeout=5):
     return response, body
 
 
-def get_osm_after_busy(port):
+def get_after_busy(port, path):
     deadline = time.monotonic() + 2
     while True:
-        response, body = get(port, "/api/osm", timeout=1)
+        response, body = get(port, path, timeout=1)
         if response.status != 503 or time.monotonic() >= deadline:
             return response, body
         time.sleep(0.01)
@@ -83,10 +83,11 @@ def test_probes_remain_responsive_when_upstream_slots_are_full(monkeypatch):
             pending = pool.submit(get, port, "/api/osm")
             assert started.wait(2)
 
-            excess, body = get(port, "/api/flood", timeout=1)
-            assert excess.status == 503
-            assert excess.getheader("Retry-After") == "2"
-            assert json.loads(body)["error"]["code"] == "busy"
+            for path in ("/api/flood", "/api/config", "/"):
+                excess, body = get(port, path, timeout=1)
+                assert excess.status == 503, path
+                assert excess.getheader("Retry-After") == "2"
+                assert json.loads(body)["error"]["code"] == "busy"
 
             health, body = get(port, "/healthz", timeout=1)
             assert health.status == 200
@@ -103,19 +104,20 @@ def test_probes_remain_responsive_when_upstream_slots_are_full(monkeypatch):
             release.set()
             assert pending.result(timeout=2)[0].status == 200
             assert get(port, "/readyz")[0].status == 200
-            assert get_osm_after_busy(port)[0].status == 200
+            assert get_after_busy(port, "/api/osm")[0].status == 200
 
 
 @pytest.mark.parametrize("stale", [None, b'{"roads":[],"facilities":[],"old":true}'])
 def test_upstream_followers_time_out_without_waiting_for_the_leader(monkeypatch, stale):
-    monkeypatch.setattr(cache_module, "CACHE_FOLLOWER_WAIT_SECONDS", 0.05, raising=False)
+    if stale is not None:
+        monkeypatch.setattr(cache_module, "CACHE_FOLLOWER_WAIT_SECONDS", 0.05)
     monkeypatch.setattr(server.Handler, "request_slots", threading.BoundedSemaphore(2))
     with running_server() as port, ThreadPoolExecutor(1) as pool:
         with blocked_osm(monkeypatch, stale=stale) as (started, release):
             leader = pool.submit(get, port, "/api/osm")
             assert started.wait(2)
 
-            response, body = get(port, "/api/osm", timeout=1)
+            response, body = get(port, "/api/osm", timeout=2)
             assert not leader.done()
             if stale is None:
                 assert response.status == 503
@@ -126,6 +128,7 @@ def test_upstream_followers_time_out_without_waiting_for_the_leader(monkeypatch,
                 assert response.getheader("X-Data-Stale") == "1"
                 assert body == stale
 
+            assert get_after_busy(port, "/api/config")[0].status == 200
             release.set()
             response, body = leader.result(timeout=2)
             assert response.status == 200
@@ -145,7 +148,7 @@ def test_api_capacity_recovers_after_upstream_failure(monkeypatch):
             assert json.loads(body)["error"]["code"] == "upstream_unavailable"
 
             monkeypatch.setattr(osm_module, "_fetch_osm_from_upstream", lambda: b'{"roads":[]}')
-            assert get_osm_after_busy(port)[0].status == 200
+            assert get_after_busy(port, "/api/osm")[0].status == 200
 
 
 def test_api_capacity_recovers_after_client_disconnects(monkeypatch):
@@ -157,7 +160,7 @@ def test_api_capacity_recovers_after_client_disconnects(monkeypatch):
             client.shutdown(socket.SHUT_RDWR)
 
         release.set()
-        assert get_osm_after_busy(port)[0].status == 200
+        assert get_after_busy(port, "/api/osm")[0].status == 200
 
 
 def test_server_closes_client_socket_when_request_stalls(monkeypatch):

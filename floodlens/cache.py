@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
-from floodlens.config import CACHE_FOLLOWER_WAIT_SECONDS
+from floodlens.config import CACHE_FOLLOWER_WAIT_SECONDS, COLD_CACHE_FOLLOWER_WAIT_SECONDS
 
 T = TypeVar("T")
 
@@ -83,6 +83,11 @@ class TTLCache(Generic[T]):
             fresh_hit = not force_refresh and self._fresh(self._entry)
             if fresh_hit:
                 return self._entry.value, False
+            follower_timeout = (
+                COLD_CACHE_FOLLOWER_WAIT_SECONDS
+                if self._entry is None
+                else CACHE_FOLLOWER_WAIT_SECONDS
+            )
             if self._inflight is None:
                 self._inflight = _Inflight()
                 slot = self._inflight
@@ -112,7 +117,7 @@ class TTLCache(Generic[T]):
                 self._entry = _Entry(self._clock(), value)
             return value, False
 
-        completed = slot.event.wait(CACHE_FOLLOWER_WAIT_SECONDS)
+        completed = slot.event.wait(follower_timeout)
         with self._lock:
             if not completed:
                 if self._entry is not None:

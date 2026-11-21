@@ -246,14 +246,14 @@ class Handler(SimpleHTTPRequestHandler):
             self._write_access_log(parsed.path, started)
             return
 
-        api_path = parsed.path in {"/api/osm", "/api/flood"}
-        if api_path and not self.request_slots.acquire(blocking=False):
+        needs_slot = parsed.path not in {"/healthz", "/readyz", "/metrics"}
+        if needs_slot and not self.request_slots.acquire(blocking=False):
             self._send_busy()
             self._write_access_log(parsed.path, started)
             return
 
         try:
-            if api_path:
+            if parsed.path in {"/api/osm", "/api/flood"}:
                 allowed, _retry = self._allow_api(parsed.path)
                 if not allowed:
                     return
@@ -424,7 +424,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             super().do_GET()
         finally:
-            if api_path:
+            if needs_slot:
                 self.request_slots.release()
             self._write_access_log(parsed.path, started)
 

@@ -42,6 +42,8 @@ PILOT_BOUNDS = {"south": SOUTH, "west": WEST, "north": NORTH, "east": EAST}
 
 OSM_CACHE_TTL = 900
 FLOOD_CACHE_TTL = 3600
+COLD_CACHE_FOLLOWER_WAIT_SECONDS = 1
+# Allow for three 75-second Overpass attempts plus retry backoff when data is cached.
 CACHE_FOLLOWER_WAIT_SECONDS = 240
 CLIENT_SOCKET_TIMEOUT_SECONDS = 10
 OSM_BROWSER_TTL = 60
