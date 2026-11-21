@@ -94,6 +94,28 @@ for (const height of [844, 824]) {
   });
 }
 
+for (const state of ["empty", "error"]) {
+  test(`live landscape ${state} keeps BNPB badge clear of fixed surfaces`, async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await enterState(page, state, { bnpb: true });
+    const badge = page.locator(".hazard-badge");
+    await expect(badge).toBeVisible();
+    await expect(badge).toBeInViewport({ ratio: 1 });
+    const overlap = await badge.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      return [...document.querySelectorAll(".map-empty, .map-error, .map-legend, .map-instruction, .leaflet-control-zoom, .leaflet-draw-toolbar, .leaflet-control-scale, .leaflet-control-attribution")].some((surface) => {
+        const other = surface.getBoundingClientRect();
+        return Math.min(box.right, other.right) > Math.max(box.left, other.left) &&
+          Math.min(box.bottom, other.bottom) > Math.max(box.top, other.top);
+      });
+    });
+    expect(overlap).toBe(false);
+    if (process.env.RESPONSIVE_SCREENSHOTS) {
+      await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/landscape-${state}-bnpb.png` });
+    }
+  });
+}
+
 async function targetSize(locator) {
   const box = await locator.boundingBox();
   expect.soft(box.width, `${await locator.evaluate((el) => el.id || el.className)} width`).toBeGreaterThanOrEqual(44);
@@ -160,7 +182,7 @@ for (const layout of layouts) {
         await expect(credits).toContainText("HERE, Garmin");
         await expect(credits).toContainText("OpenStreetMap contributors");
         await expect(credits).toBeInViewport({ ratio: 1 });
-        const surfaces = await page.locator(".map-empty:visible, .map-error:visible, .map-legend:visible, .map-instruction:visible, .leaflet-control-zoom:visible, .leaflet-draw-toolbar:visible, .leaflet-control-scale:visible, .leaflet-control-attribution:visible").evaluateAll((elements) => elements.map((el) => ({
+        const surfaces = await page.locator(".hazard-badge:visible, .map-empty:visible, .map-error:visible, .map-legend:visible, .map-instruction:visible, .leaflet-control-zoom:visible, .leaflet-draw-toolbar:visible, .leaflet-control-scale:visible, .leaflet-control-attribution:visible").evaluateAll((elements) => elements.map((el) => ({
           name: el.className,
           box: el.getBoundingClientRect().toJSON(),
         })));
