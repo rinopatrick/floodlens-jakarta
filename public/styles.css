@@ -639,7 +639,7 @@ h1, h2, h3, p { margin-top: 0; }
   #app[data-state="empty"] .map-instruction,
   #app[data-state="empty"] .hazard-badge { display: none; }
   #app[data-state="empty"] .map-empty { top: calc(50% + 20px); }
-  #app[data-state="error"] .map-region { min-height: 380px; }
+  #app[data-state="error"] .map-region { min-height: min(380px, 55svh); }
   .map-empty h2, .map-error h2 { font-size: 21px; }
   .map-empty p, .map-error p { font-size: 11px; }
   .map-footer { left: 8px; right: 8px; bottom: 32px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
