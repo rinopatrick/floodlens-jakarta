@@ -730,6 +730,8 @@ h1, h2, h3, p { margin-top: 0; }
 }
 
 @media (max-width: 360px) and (max-height: 700px) {
+  #app[data-hazard="on"]:not([data-fixture="true"]) .workspace { overflow-y: auto; }
+  #app[data-hazard="on"]:not([data-fixture="true"]) .inspector { min-height: 144px; }
   #app[data-hazard="on"]:not([data-fixture="true"]) .workspace .map-region { min-height: 320px; }
   #app[data-hazard="on"]:not([data-fixture="true"]) .leaflet-top.leaflet-right { top: 174px; left: 9px; right: auto; }
   #app[data-hazard="on"]:not([data-fixture="true"]) .map-footer { left: 76px; }
