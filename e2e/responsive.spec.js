@@ -32,7 +32,7 @@ test("short mobile error keeps inspector controls reachable", async ({ page }) =
   }
 });
 
-async function enterState(page, state, { bnpb = false } = {}) {
+async function enterState(page, state, { bnpb = false, errorMessage = "Sumber data OpenStreetMap tidak tersedia." } = {}) {
   if (bnpb) {
     await page.route("**/api/config", async (route) => {
       const response = await route.fetch();
@@ -47,7 +47,7 @@ async function enterState(page, state, { bnpb = false } = {}) {
     await page.route("**/api/osm**", (route) => route.fulfill({
       status: 502,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "upstream_unavailable", message: "Sumber data OpenStreetMap tidak tersedia." } }),
+      body: JSON.stringify({ error: { code: "upstream_unavailable", message: errorMessage } }),
     }));
   }
   await page.goto("/");
@@ -76,6 +76,28 @@ async function enterState(page, state, { bnpb = false } = {}) {
   await expect(page.locator("#app")).toHaveAttribute("data-state", state);
   await expect(page.locator(".leaflet-tile-loaded").first()).toBeVisible();
 }
+
+test("landscape full upstream error leaves BNPB badge clear and hit-testable", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await enterState(page, "error", {
+    bnpb: true,
+    errorMessage: "Sumber data OpenStreetMap tidak tersedia. Coba lagi beberapa saat.",
+  });
+  const badge = page.locator(".hazard-badge");
+  await expect(badge).toBeVisible();
+  await expect(badge).toBeInViewport({ ratio: 1 });
+  const badgeBox = await badge.boundingBox();
+  const errorBox = await page.locator(".map-error").boundingBox();
+  expect.soft(Math.min(badgeBox.y + badgeBox.height, errorBox.y + errorBox.height) > Math.max(badgeBox.y, errorBox.y) &&
+    Math.min(badgeBox.x + badgeBox.width, errorBox.x + errorBox.width) > Math.max(badgeBox.x, errorBox.x)).toBe(false);
+  expect.soft(await badge.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
+  if (process.env.RESPONSIVE_SCREENSHOTS) {
+    await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/landscape-full-error-bnpb.png` });
+  }
+});
 
 for (const height of [844, 824]) {
   test(`BNPB result leaves map controls hittable at 390x${height}`, async ({ page }) => {
