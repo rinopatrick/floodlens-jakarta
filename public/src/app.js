@@ -399,9 +399,15 @@ function isInsidePilot(lat, lon) {
       const impact = $("impact-section");
       panel.scrollTo({ top: Math.max(0, impact.offsetTop - 8), behavior: "smooth" });
     }
-    function currentRing(layer) {
-      const points = layer.getLatLngs();
+    function outerRing(points) {
       return Array.isArray(points[0]) ? points[0] : points;
+    }
+    function currentRing(layer) {
+      return outerRing(layer.getLatLngs());
+    }
+    // Analysis reads the last accepted shape: Leaflet.draw edits the layer in place.
+    function committedRing(layer) {
+      return outerRing(committedLatLngs.get(layer));
     }
     function zoneError(layer) {
       const ring = currentRing(layer);
@@ -550,7 +556,7 @@ function isInsidePilot(lat, lon) {
         };
       }
       const baseline = baselineCache.result;
-      const ring = activePolygon ? currentRing(activePolygon) : null;
+      const ring = activePolygon ? committedRing(activePolygon) : null;
       const closure = ring
         ? closedSegmentsFor(graphData.segments, ring)
         : { closed: new Set(), zoneAreaM2: 0 };
@@ -623,7 +629,7 @@ function isInsidePilot(lat, lon) {
         const requestId = ++analysisRequestId;
         let ring = null;
         if (activePolygon) {
-          ring = currentRing(activePolygon).map((point) => ({
+          ring = committedRing(activePolygon).map((point) => ({
             lat: point.lat,
             lng: point.lng,
           }));
@@ -757,7 +763,7 @@ function isInsidePilot(lat, lon) {
       const error = edited && zoneError(edited);
       if (error) {
         // Revert to the last accepted shape so the shown results stay current.
-        edited.setLatLngs(committedLatLngs.get(edited));
+        edited.setLatLngs(L.LatLngUtil.cloneLatLngs(committedLatLngs.get(edited)));
         // Leaflet.draw's edit handler caches the ring; this re-points it at the restored one.
         edited.fire("revert-edited", { layer: edited });
         rejectZone(error);

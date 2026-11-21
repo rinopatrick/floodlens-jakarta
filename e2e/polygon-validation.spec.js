@@ -241,6 +241,51 @@ for (const mode of MODES) {
       expect(zone.north).toBeGreaterThan(-6.1995);
     });
 
+    test("recomputing during an edit that is then rejected keeps the scenario current", async ({ page }) => {
+      await loadFixtureMap(page, { ...mode, maxPolygonVertices: 4 });
+      await drawPolygon(page, RING);
+      await expectBridgeScenario(page);
+
+      await page.locator(".leaflet-draw-edit-edit").click();
+      // Reshape the draft in place, as vertex drags do, into an over-limit zone off the bridge.
+      await page.evaluate((ring) => {
+        window.floodlensMap.eachLayer((layer) => {
+          if (!(layer instanceof window.L.Polygon)) return;
+          const points = layer.getLatLngs()[0];
+          ring.forEach(([lat, lng], i) => {
+            if (points[i]) Object.assign(points[i], { lat, lng });
+            else points.push(window.L.latLng(lat, lng));
+          });
+          layer.edited = true;
+          layer.redraw();
+        });
+      }, [...NORTH_RING, [-6.1984, 106.8314]]);
+      await page.getByRole("tab", { name: "Skenario" }).click();
+      await page.locator("#applyButton").click();
+      await page.waitForTimeout(500);
+      await page.locator(".leaflet-draw-actions a").filter({ hasText: "Simpan" }).click();
+
+      await expectZoneRejected(page, "Poligon terlalu detail");
+      await expectBridgeScenario(page);
+    });
+
+    test("a second rejected edit still restores the accepted zone", async ({ page }) => {
+      await loadFixtureMap(page, { ...mode, maxPolygonVertices: 4 });
+      await drawPolygon(page, RING);
+      await page.locator(".leaflet-draw-edit-edit").click();
+      await dragOnMap(page, [-6.2005, 106.8315], 0, 20);
+      await page.locator(".leaflet-draw-actions a").filter({ hasText: "Simpan" }).click();
+      await expectZoneRejected(page, "Poligon terlalu detail");
+
+      await page.locator(".leaflet-draw-edit-edit").click();
+      await dragOnMap(page, [-6.1995, 106.8318], 0, -30);
+      await dragOnMap(page, [-6.2005, 106.8315], 0, 20);
+      await page.locator(".leaflet-draw-actions a").filter({ hasText: "Simpan" }).click();
+
+      await expectZoneRejected(page, "Poligon terlalu detail");
+      await expectBridgeScenario(page);
+    });
+
     test("undo after a rejected polygon restores the zone it replaced", async ({ page }) => {
       await loadFixtureMap(page, mode);
       await drawPolygon(page, RING);
