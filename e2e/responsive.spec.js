@@ -129,9 +129,27 @@ for (const state of ["baseline", "result", "error"]) {
         return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
       }), await control.getAttribute("title") || await control.textContent()).toBe(true);
     }
+    const surfaces = await page.locator(".map-error:visible, .map-legend:visible, .map-instruction:visible, .leaflet-control-zoom:visible, .leaflet-draw-toolbar:visible, .leaflet-control-attribution:visible").evaluateAll((elements) => elements.map((el) => ({
+      name: el.className,
+      box: el.getBoundingClientRect().toJSON(),
+    })));
+    for (let i = 0; i < surfaces.length; i++) {
+      for (const other of surfaces.slice(i + 1)) {
+        const { box, name } = surfaces[i];
+        const overlap = Math.min(box.right, other.box.right) > Math.max(box.left, other.box.left) &&
+          Math.min(box.bottom, other.box.bottom) > Math.max(box.top, other.box.top);
+        expect.soft(overlap, `${name} overlaps ${other.name}`).toBe(false);
+      }
+    }
     if (process.env.RESPONSIVE_SCREENSHOTS) {
       await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/${state === "result" ? "320x568-bnpb" : `320x568-${state}-bnpb`}.png` });
     }
+    await page.getByRole("tab", { name: "Skenario", exact: true }).click();
+    const input = page.locator("#originLat");
+    await input.scrollIntoViewIfNeeded();
+    await expect(input).toBeInViewport({ ratio: 1 });
+    await input.click();
+    await expect(input).toBeFocused();
   });
 }
 

@@ -725,3 +725,11 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-height: 600px) and (max-width: 720px) {
   #app[data-state="error"] .map-footer { left: 76px; }
 }
+
+@media (max-width: 360px) and (max-height: 700px) {
+  #app[data-hazard="on"]:not([data-fixture="true"]) .workspace .map-region { min-height: 320px; }
+  #app[data-hazard="on"]:not([data-fixture="true"]) .leaflet-top.leaflet-right { top: 174px; left: 9px; right: auto; }
+  #app[data-hazard="on"]:not([data-fixture="true"]) .map-footer { left: 76px; }
+  #app[data-hazard="on"]:not([data-fixture="true"]) .map-instruction { display: none; }
+  #app[data-hazard="on"]:not([data-fixture="true"]) .map-error { left: 76px; right: 8px; width: auto; transform: none; }
+}
