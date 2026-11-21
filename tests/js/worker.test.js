@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildRenderPayload } from "../../public/src/analysis-payload.js";
-import { buildGraph, nearestNodeWithDistance } from "../../public/src/graph.js";
+import { buildGraph, buildSpatialIndex, nearestNodeWithDistance } from "../../public/src/graph.js";
 import { data, makeScenario, RING } from "./scenario-fixture.js";
 
 const origin = { lat: -6.2, lon: 106.83 };
@@ -41,13 +41,21 @@ test("worker protocol returns rounded polygon area matching the main-thread fall
   // Fixture polygon area: 7340.010107502245 m².
   assert.equal(result.zoneAreaM2, 7340);
 
-  const { graph, facilities, baseline, scenario, closed, zoneAreaM2 } = makeScenario();
+  const { graph, baseline, scenario, closed, zoneAreaM2 } = makeScenario();
+  const spatialIndex = buildSpatialIndex(graph.nodes);
+  const facilities = data.facilities.map((facility) => {
+    const match = nearestNodeWithDistance(graph.nodes, facility, spatialIndex);
+    return match
+      ? { ...facility, nodeId: match.nodeId, snapDistance: match.distance }
+      : null;
+  }).filter(Boolean);
   const fallback = buildRenderPayload({
-    snap: nearestNodeWithDistance(graph.nodes, origin),
+    snap: nearestNodeWithDistance(graph.nodes, origin, spatialIndex),
     baseline, scenario, closed, zoneAreaM2,
     facilityList: facilities, nodes: graph.nodes, maxMeters: 5000,
   });
-  assert.equal(result.zoneAreaM2, fallback.zoneAreaM2);
+  const { type, requestId, ...payload } = result;
+  assert.deepEqual(payload, fallback);
 });
 
 test("worker protocol resets area for null rings across repeated analysis messages", async () => {

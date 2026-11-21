@@ -3,7 +3,10 @@ import { restorePath } from "./graph.js";
 
 // One render-payload builder for the Worker path and the main-thread
 // fallback. Pure: no Leaflet, no DOM, unit-tested.
-export function buildRenderPayload({ snap, baseline, scenario, closed, zoneAreaM2 = 0, facilityList, nodes, maxMeters }) {
+export function buildRenderPayload({ snap, baseline, scenario, closed, zoneAreaM2, facilityList, nodes, maxMeters }) {
+  if (!Number.isFinite(zoneAreaM2)) {
+    throw new TypeError("zoneAreaM2 must be a finite number");
+  }
   const summary = analyzeScenario({
     facilities: facilityList,
     baseline,
