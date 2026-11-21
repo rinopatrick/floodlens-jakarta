@@ -176,3 +176,128 @@ test("spatial index matches linear snap", () => {
   assert.equal(indexed.nodeId, linear.nodeId);
   assert.ok(Math.abs(indexed.distance - linear.distance) < 1e-6);
 });
+
+function largeGraph(entries, filler) {
+  const nodes = new Map(entries);
+  for (let i = nodes.size; i < 501; i++) nodes.set(`filler-${i}`, filler);
+  return nodes;
+}
+
+test("indexed snap finds the closer node across a cell boundary", () => {
+  const nodes = largeGraph([
+    ["same-cell", [-6.209, 106.839]],
+    ["adjacent-cell", [-6.21001, 106.8301]],
+  ], [-6.15, 106.88]);
+  const point = { lat: -6.20999, lon: 106.8301 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "adjacent-cell");
+  assert.ok(Math.abs(linear.distance - 2.2239) < 1e-4);
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap skips distant nodes once the closest node is proven", (t) => {
+  const nodes = largeGraph([["nearby", [-6.205, 106.835]]], [-6.155, 106.885]);
+  const point = { lat: -6.205, lon: 106.835 };
+  const index = buildSpatialIndex(nodes);
+  const expected = nearestNodeWithDistance(nodes, point);
+  const iterations = t.mock.method(nodes, Symbol.iterator);
+  const lookups = t.mock.method(nodes, "get");
+
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, index), expected);
+  assert.equal(iterations.mock.callCount(), 0, "indexed snap should not scan all nodes");
+  assert.ok(lookups.mock.callCount() < nodes.size, "indexed snap should prune distant nodes");
+});
+
+test("indexed snap accounts for shorter longitude distances at high latitudes", () => {
+  const nodes = largeGraph([
+    ["same-cell", [80.00608, 0.005]],
+    ["adjacent-cell", [80.005, 0.01001]],
+  ], [81, 1]);
+  const point = { lat: 80.005, lon: 0.005 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "adjacent-cell");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap stays exact across the antimeridian", () => {
+  const nodes = largeGraph([
+    ["same-cell", [0, 179.991]],
+    ["across-meridian", [0, -179.999]],
+  ], [1, 179]);
+  const point = { lat: 0, lon: 179.999 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "across-meridian");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap returns null for an empty graph", () => {
+  const nodes = new Map();
+  assert.equal(nearestNodeWithDistance(nodes, { lat: 0, lon: 0 }, buildSpatialIndex(nodes)), null);
+});
+
+test("indexed snap reaches a node several cells away in a sparse graph", () => {
+  const nodes = largeGraph([["nearest", [0.045, 0.045]]], [0.085, 0.085]);
+  const point = { lat: 0.005, lon: 0.005 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "nearest");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap matches the linear result outside the indexed area", () => {
+  const nodes = largeGraph([["nearest", [0.045, 0.045]]], [0.025, 0.025]);
+  const point = { lat: 0.3, lon: 0.3 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "nearest");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap breaks ties across cells in graph insertion order", () => {
+  const nodes = largeGraph([
+    ["first", [0, -0.005]],
+    ["second", [0, 0.005]],
+  ], [1, 1]);
+  const point = { lat: 0, lon: 0 };
+  const linear = nearestNodeWithDistance(nodes, point);
+
+  assert.equal(linear.nodeId, "first");
+  assert.deepEqual(nearestNodeWithDistance(nodes, point, buildSpatialIndex(nodes)), linear);
+});
+
+test("indexed snap matches linear results for seeded points around cell boundaries", () => {
+  let seed = 42;
+  function random() {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 2 ** 32;
+  }
+
+  const nodes = new Map();
+  for (let i = 0; i < 640; i++) {
+    nodes.set(i, [-6.25 + random() * 0.08, 106.8 + random() * 0.08]);
+  }
+  const index = buildSpatialIndex(nodes);
+
+  for (let i = 0; i < 100; i++) {
+    const lat = (-625 + Math.floor(random() * 9)) / 100;
+    const lon = (10680 + Math.floor(random() * 9)) / 100;
+    const jitter = random() * 0.01;
+    for (const point of [
+      { lat, lon },
+      { lat: lat - 1e-6, lon: lon + jitter },
+      { lat: lat + 1e-6, lon: lon + jitter },
+      { lat: lat + jitter, lon: lon - 1e-6 },
+      { lat: lat + jitter, lon: lon + 1e-6 },
+      { lat: lat + random() * 0.01, lon: lon + random() * 0.01 },
+    ]) {
+      assert.deepEqual(
+        nearestNodeWithDistance(nodes, point, index),
+        nearestNodeWithDistance(nodes, point),
+        `snap at ${point.lat}, ${point.lon}`,
+      );
+    }
+  }
+});
