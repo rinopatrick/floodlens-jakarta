@@ -117,6 +117,8 @@ function isInsidePilot(lat, lon) {
     let originMarker = null;
     let activePolygon = null;
     let replacedPolygon = null;
+    let zoneRejection = null;
+    const committedLatLngs = new WeakMap();
     let drawActive = false;
     let originSnap = null;
     let baselineCache = { key: null, result: null };
@@ -372,8 +374,10 @@ function isInsidePilot(lat, lon) {
       });
       $("stateAnnouncement").textContent = `Tahap: ${labels[state] || state}`;
     }
-    function updateInstructions(title, message, drawing = false) {
+    function updateInstructions(title, message, drawing = false, rejected = false) {
+      if (!rejected) zoneRejection = null;
       instructions.classList.toggle("is-drawing", drawing);
+      instructions.classList.toggle("is-error", rejected);
       $("instructionTitle").textContent = title;
       $("instructionCopy").textContent = message;
     }
@@ -397,17 +401,29 @@ function isInsidePilot(lat, lon) {
     }
     function currentRing(layer) {
       const points = layer.getLatLngs();
-      const ring = Array.isArray(points[0]) ? points[0] : points;
+      return Array.isArray(points[0]) ? points[0] : points;
+    }
+    function zoneError(layer) {
+      const ring = currentRing(layer);
       if (ring.length > MAX_POLYGON_VERTICES) {
-        showMapError(`Poligon terlalu detail. Sederhanakan hingga ${MAX_POLYGON_VERTICES} titik.`);
-        return null;
+        return `Poligon terlalu detail. Sederhanakan hingga ${MAX_POLYGON_VERTICES} titik.`;
       }
       if (ringAreaSquareMeters(ring) < MIN_POLYGON_AREA_M2) {
-        showMapError("Zona terlalu kecil. Perbesar zona agar memutus segmen secara bermakna.");
-        return null;
+        return "Zona terlalu kecil. Perbesar zona agar memutus segmen secara bermakna.";
       }
+      return null;
+    }
+    function commitPolygon(layer) {
+      committedLatLngs.set(layer, L.LatLngUtil.cloneLatLngs(layer.getLatLngs()));
       hideMapError();
-      return ring;
+    }
+    function showZoneRejection() {
+      updateInstructions("Zona ditolak", zoneRejection.message, false, true);
+    }
+    function rejectZone(message) {
+      zoneRejection = { message };
+      showZoneRejection();
+      setAppState(activePolygon ? "result" : (osmData ? "baseline" : "empty"));
     }
     function renderClosures(closed) {
       closureLayer.clearLayers();
@@ -535,10 +551,6 @@ function isInsidePilot(lat, lon) {
       }
       const baseline = baselineCache.result;
       const ring = activePolygon ? currentRing(activePolygon) : null;
-      if (activePolygon && !ring) {
-        setAnalysisPending(false);
-        return;
-      }
       const closure = ring
         ? closedSegmentsFor(graphData.segments, ring)
         : { closed: new Set(), zoneAreaM2: 0 };
@@ -611,12 +623,7 @@ function isInsidePilot(lat, lon) {
         const requestId = ++analysisRequestId;
         let ring = null;
         if (activePolygon) {
-          const raw = currentRing(activePolygon);
-          if (!raw) {
-            setAnalysisPending(false);
-            return;
-          }
-          ring = raw.map((point) => ({
+          ring = currentRing(activePolygon).map((point) => ({
             lat: point.lat,
             lng: point.lng,
           }));
@@ -718,6 +725,10 @@ function isInsidePilot(lat, lon) {
     map.on("draw:drawstop", () => {
       drawActive = false;
       setAppState(activePolygon ? "result" : (osmData ? "baseline" : "empty"));
+      if (zoneRejection) {
+        showZoneRejection();
+        return;
+      }
       updateInstructions(
         activePolygon ? "Zona skenario aktif" : "Baseline aktif",
         activePolygon ? "Ruas tertutup saat titik tengahnya berada di dalam poligon." : "Klik peta untuk mengganti titik awal.",
@@ -725,6 +736,12 @@ function isInsidePilot(lat, lon) {
       );
     });
     map.on(L.Draw.Event.CREATED, (event) => {
+      const error = zoneError(event.layer);
+      if (error) {
+        rejectZone(error);
+        return;
+      }
+      commitPolygon(event.layer);
       replacedPolygon = activePolygon;
       $("undoPolygon").hidden = !replacedPolygon;
       scenarioLayers.clearLayers();
@@ -736,7 +753,16 @@ function isInsidePilot(lat, lon) {
       revealImpact();
     });
     map.on(L.Draw.Event.EDITED, () => {
-      activePolygon = scenarioLayers.getLayers()[0] || null;
+      const edited = scenarioLayers.getLayers()[0] || null;
+      const error = edited && zoneError(edited);
+      if (error) {
+        // Revert to the last accepted shape so the shown results stay current.
+        edited.setLatLngs(committedLatLngs.get(edited));
+        rejectZone(error);
+        return;
+      }
+      if (edited) commitPolygon(edited);
+      activePolygon = edited;
       updateAnalysis();
       setAppState(activePolygon ? "result" : (osmData ? "baseline" : "empty"));
       updateInstructions("Zona skenario diperbarui", "Ruas tertutup saat titik tengahnya berada di dalam poligon.", false);
@@ -798,6 +824,7 @@ function isInsidePilot(lat, lon) {
       activePolygon = replacedPolygon;
       replacedPolygon = null;
       $("undoPolygon").hidden = true;
+      hideMapError();
       updateAnalysis();
       setAppState("result");
       updateInstructions("Zona sebelumnya dipulihkan", "Ruas tertutup saat titik tengahnya berada di dalam poligon.", false);
