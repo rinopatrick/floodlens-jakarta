@@ -1,12 +1,36 @@
 import http.client
 import json
 import threading
+from urllib.parse import parse_qs, urlsplit
 from contextlib import contextmanager
 from pathlib import Path
 
 import server
+from floodlens.flood import flood_overlay_url
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_export_bbox_matches_config(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", FIXTURES)
+    with running_server() as port:
+        response, body = get(port, "/api/config")
+    assert response.status == 200
+    bounds = json.loads(body)["floodBounds"]
+    assert bounds == {"south": -6.31, "west": 106.73, "north": -6.09, "east": 106.94}
+    query = parse_qs(urlsplit(flood_overlay_url()).query)
+    assert [float(value) for value in query["bbox"][0].split(",")] == [
+        bounds["west"], bounds["south"], bounds["east"], bounds["north"]
+    ]
+    assert query["bboxSR"] == ["4326"]
+    assert query["imageSR"] == ["4326"]
+
+
+def test_export_size_matches_bbox_aspect():
+    query = parse_qs(urlsplit(flood_overlay_url()).query)
+    width, height = [int(value) for value in query["size"][0].split(",")]
+    assert max(width, height) == 1440
+    assert abs((width / height) / (0.21 / 0.22) - 1) < 0.01
 
 
 @contextmanager
