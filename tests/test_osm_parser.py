@@ -58,6 +58,11 @@ def test_roads_preserve_oneway_and_names():
         pytest.param([None, -6.2, -6.2], [("9.0", [2, 3])], id="invalid-first"),
         pytest.param([-6.2, -6.2, None], [("9.0", [1, 2])], id="invalid-last"),
         pytest.param([None, "invalid", -6.4], [], id="all-invalid"),
+        pytest.param(
+            [-6.2, -6.2, 10**400, -6.2, -6.2],
+            [("9.0", [1, 2]), ("9.1", [4, 5])],
+            id="overflowing-coordinate",
+        ),
         pytest.param([-6.2, -6.2, -6.2], [("9", [1, 2, 3])], id="fully-valid"),
         pytest.param(
             [-6.2, -6.2, None, -6.2, "invalid", -6.2, -6.2],

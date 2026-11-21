@@ -59,43 +59,68 @@ test("buildGraph records nodes, segments, and oneway direction", () => {
   assert.equal((adjacency.get("c") || []).some((edge) => edge.to === "d"), false);
 });
 
-function graphFromOsmWay(nodes, latitudes) {
-  const way = {
+function osmWay(id, nodes, latitudes) {
+  return {
     type: "way",
-    id: 9,
+    id,
     tags: { highway: "primary" },
     nodes,
     geometry: latitudes.map((lat, index) => ({ lat, lon: 106.83 + index / 1000 })),
   };
-  const data = JSON.parse(execFileSync("python3", [
+}
+
+function graphFromOsmWays(...ways) {
+  const args = [
     "-c",
     "import json, sys; from floodlens.osm import simplify_osm; " +
       "sys.stdout.buffer.write(simplify_osm(json.load(sys.stdin)))",
-  ], {
+  ];
+  const options = {
     cwd: new URL("../../", import.meta.url),
-    input: JSON.stringify({ elements: [way] }),
+    input: JSON.stringify({ elements: ways }),
     encoding: "utf8",
-  }));
-
-  return buildGraph(data);
+  };
+  let output;
+  try {
+    output = execFileSync("python", args, options);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    output = execFileSync("python3", args, options);
+  }
+  return buildGraph(JSON.parse(output));
 }
 
 test("buildGraph does not bridge invalid intermediate OSM geometry", () => {
-  const { segments } = graphFromOsmWay([1, 2, 3], [-6.2, null, -6.2]);
+  const { segments } = graphFromOsmWays(osmWay(9, [1, 2, 3], [-6.2, null, -6.2]));
 
   assert.deepEqual(segments.map(({ from, to }) => [from, to]), []);
 });
 
 test("blocking one split road segment leaves the other open", () => {
-  const { adjacency, segments } = graphFromOsmWay(
-    [1, 2, 3, 4, 5],
-    [-6.2, -6.2, -6.4, -6.2, -6.2],
+  const { adjacency, segments } = graphFromOsmWays(
+    osmWay(9, [1, 2, 3, 4, 5], [-6.2, -6.2, -6.4, -6.2, -6.2]),
   );
 
   assert.deepEqual(segments.map(({ from, to }) => [from, to]), [["1", "2"], ["4", "5"]]);
   const blocked = new Set([segments[0].key]);
   assert.equal(dijkstra(adjacency, "1", blocked).distances.has("2"), false);
   assert.equal(dijkstra(adjacency, "4", blocked).distances.has("5"), true);
+});
+
+test("malformed way IDs cannot share a split road's closure key", () => {
+  const { adjacency, segments } = graphFromOsmWays(
+    osmWay(9, [1, 2, 3, 4, 5], [-6.2, -6.2, null, -6.2, -6.2]),
+    osmWay(9.1, [6, 7], [-6.2, -6.2]),
+    osmWay(10, [8, 9], [-6.2, -6.2]),
+  );
+
+  assert.equal(new Set(segments.map(({ key }) => key)).size, segments.length);
+  assert.deepEqual(segments.map(({ from, to }) => [from, to]), [
+    ["1", "2"], ["4", "5"], ["8", "9"],
+  ]);
+  const blocked = new Set([segments[1].key]);
+  assert.equal(dijkstra(adjacency, "4", blocked).distances.has("5"), false);
+  assert.equal(dijkstra(adjacency, "8", blocked).distances.has("9"), true);
 });
 
 test("dijkstra respects oneway roads and blocked segments", () => {

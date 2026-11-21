@@ -130,10 +130,12 @@ def _process_road(element: dict, roads: list[dict]) -> None:
     if not isinstance(tags, dict):
         return
     highway = tags.get("highway")
+    way_id = element.get("id")
     nodes = element.get("nodes")
     geometry = element.get("geometry")
     if (
         element.get("type") != "way"
+        or type(way_id) is not int
         or highway not in ALLOWED_ROADS
         or not isinstance(nodes, list)
         or not isinstance(geometry, list)
@@ -146,7 +148,10 @@ def _process_road(element: dict, roads: list[dict]) -> None:
     runs = []
     points = []
     for node_id, point in zip(nodes, geometry, strict=True):
-        coords = _as_point(point)
+        try:
+            coords = _as_point(point)
+        except OverflowError:
+            coords = None
         if coords is None:
             if len(points) >= 2:
                 runs.append(points)
@@ -156,11 +161,10 @@ def _process_road(element: dict, roads: list[dict]) -> None:
     if len(points) >= 2:
         runs.append(points)
 
-    way_id = str(element.get("id"))
     for index, run in enumerate(runs):
         roads.append(
             {
-                "id": way_id if len(run) == len(nodes) else f"{way_id}.{index}",
+                "id": str(way_id) if len(run) == len(nodes) else f"{way_id}.{index}",
                 "name": tags.get("name", "") if isinstance(tags.get("name", ""), str) else "",
                 "kind": highway,
                 "oneway": tags.get(
