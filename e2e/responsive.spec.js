@@ -7,6 +7,31 @@ const layouts = [
   { name: "landscape", width: 844, height: 390 },
 ];
 
+test("short mobile error keeps inspector controls reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 540 });
+  await enterState(page, "error");
+  for (const name of ["Data", "Skenario", "Dampak"]) {
+    const tab = page.getByRole("tab", { name, exact: true });
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    await tab.click();
+  }
+  await page.getByRole("tab", { name: "Data", exact: true }).click();
+  const load = page.locator("#loadButton");
+  await load.scrollIntoViewIfNeeded({ timeout: 1000 });
+  await expect(load).toBeInViewport({ ratio: 1, timeout: 1000 });
+  await load.click({ trial: true, timeout: 1000 });
+  await page.getByRole("tab", { name: "Skenario", exact: true }).click();
+  for (const id of ["originLat", "originLon", "setOriginButton", "fitButton"]) {
+    const control = page.locator(`#${id}`);
+    await control.scrollIntoViewIfNeeded({ timeout: 1000 });
+    await expect(control).toBeInViewport({ ratio: 1, timeout: 1000 });
+    await control.click({ trial: true, timeout: 1000 });
+  }
+  if (process.env.RESPONSIVE_SCREENSHOTS) {
+    await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/short-mobile-error.png` });
+  }
+});
+
 async function enterState(page, state) {
   await page.route(/https:\/\/server\.arcgisonline\.com\/.*/, (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: tile }),
