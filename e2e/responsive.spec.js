@@ -116,6 +116,22 @@ for (const layout of layouts) {
   test.describe(layout.name, () => {
     test.use({ viewport: { width: layout.width, height: layout.height } });
 
+    test("loading cancel has a 44px target and visible keyboard focus", async ({ page }) => {
+      await enterState(page, "empty");
+      await page.route("**/api/osm**", () => {});
+      await page.locator("#loadButton").click();
+      const cancel = page.locator("#cancelLoad");
+      await expect(cancel).toBeVisible();
+      await targetSize(cancel);
+      for (let i = 0; i < 30 && !(await cancel.evaluate((el) => el === document.activeElement)); i++) {
+        await page.keyboard.press("Tab");
+      }
+      await visibleFocus(cancel);
+      await page.keyboard.press("Enter");
+      await expect(cancel).toBeHidden();
+      await expect(page.locator("#loadButton")).toBeEnabled();
+    });
+
     for (const state of ["empty", "baseline", "drawing", "result", "error"]) {
       test(`${state}: basemap credits stay in view independently of legend`, async ({ page }) => {
         await enterState(page, state);
