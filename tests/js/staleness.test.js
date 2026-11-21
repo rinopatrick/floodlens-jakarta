@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { describeStaleNotice, formatDataAge, osmRequestCache, readStaleness } from "../../public/src/staleness.js";
+import { describeStaleNotice, formatDataAge, loadStatus, osmRequestCache, readStaleness } from "../../public/src/staleness.js";
 
 const headers = (values) => new Headers(values);
 
@@ -57,4 +57,20 @@ test("describeStaleNotice says refresh failed and includes the age when known", 
 test("osmRequestCache always revalidates normal loads and bypasses the cache on refresh", () => {
   assert.equal(osmRequestCache(false), "no-cache");
   assert.equal(osmRequestCache(true), "no-store");
+});
+
+test("loadStatus keeps a refresh cooldown visible over the ready and stale copy", () => {
+  assert.deepEqual(loadStatus({ stale: false, cooldownWait: "24", fixture: false }),
+    { text: "Refresh dibatasi, coba lagi dalam 24 dtk", state: "live" });
+  assert.deepEqual(loadStatus({ stale: true, cooldownWait: "5", fixture: false }),
+    { text: "Refresh dibatasi, coba lagi dalam 5 dtk", state: "stale" });
+});
+
+test("loadStatus reports stale, live and fixture data without a cooldown", () => {
+  assert.deepEqual(loadStatus({ stale: true, cooldownWait: null, fixture: false }),
+    { text: "Memakai data cache, pembaruan gagal", state: "stale" });
+  assert.deepEqual(loadStatus({ stale: false, cooldownWait: null, fixture: false }),
+    { text: "Data publik siap digunakan", state: "live" });
+  assert.deepEqual(loadStatus({ stale: false, cooldownWait: null, fixture: true }),
+    { text: "Data contoh siap digunakan", state: "live" });
 });

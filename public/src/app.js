@@ -9,7 +9,7 @@ import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } f
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
 import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
-import { describeStaleNotice, osmRequestCache, readStaleness } from "./staleness.js";
+import { describeStaleNotice, loadStatus, osmRequestCache, readStaleness } from "./staleness.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
 let MAX_POLYGON_VERTICES = 512;
@@ -148,11 +148,8 @@ function isInsidePilot(lat, lon) {
         cache: osmRequestCache(refresh),
       });
       const cooldown = response.headers.get("X-Refresh") === "cooldown";
-      const cooldownWait = response.headers.get("X-Refresh-Retry-After");
+      const cooldownWait = cooldown ? response.headers.get("X-Refresh-Retry-After") : null;
       const data = await response.json().catch(() => ({}));
-      if (cooldown && cooldownWait) {
-        setStatus(`Refresh dibatasi, coba lagi dalam ${cooldownWait} dtk`, "");
-      }
       const error = data.error;
       if (!response.ok || error) {
         const message = typeof error === "string" ? error : error?.message || `HTTP ${response.status}`;
@@ -161,7 +158,7 @@ function isInsidePilot(lat, lon) {
       if (!Array.isArray(data.roads) || !Array.isArray(data.facilities)) {
         throw new Error("Respons data jalan tidak lengkap.");
       }
-      return { data, ...readStaleness(response.headers) };
+      return { data, cooldownWait, ...readStaleness(response.headers) };
     }
     function showStaleNotice(stale, ageSeconds) {
       const notice = $("staleNotice");
@@ -648,7 +645,7 @@ function isInsidePilot(lat, lon) {
       activeLoadController = new AbortController();
       try {
         setLoading(true);
-        const { data: payload, stale, ageSeconds } = await fetchOsmData(refresh, activeLoadController.signal);
+        const { data: payload, stale, ageSeconds, cooldownWait } = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
         spatialIndex = buildSpatialIndex(graphData.nodes);
@@ -677,11 +674,8 @@ function isInsidePilot(lat, lon) {
         hasLoadedData = true;
         const fixture = $("app").dataset.fixture === "true";
         showStaleNotice(stale, ageSeconds);
-        if (stale) {
-          setStatus("Memakai data cache, pembaruan gagal", "stale");
-        } else {
-          setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
-        }
+        const status = loadStatus({ stale, cooldownWait, fixture });
+        setStatus(status.text, status.state);
         $("loadButtonText").textContent = fixture ? "Perbarui data contoh" : "Perbarui data live";
         setAppState(activePolygon ? "result" : "baseline");
         updateInstructions("Baseline aktif", "Klik peta untuk mengubah titik awal, atau gambar zona terdampak.", false);

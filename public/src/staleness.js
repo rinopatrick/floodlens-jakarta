@@ -22,3 +22,10 @@ export function describeStaleNotice(ageSeconds) {
 export function osmRequestCache(refresh) {
   return refresh ? "no-store" : "no-cache";
 }
+
+export function loadStatus({ stale, cooldownWait, fixture }) {
+  const state = stale ? "stale" : "live";
+  if (cooldownWait) return { text: `Refresh dibatasi, coba lagi dalam ${cooldownWait} dtk`, state };
+  if (stale) return { text: "Memakai data cache, pembaruan gagal", state };
+  return { text: fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", state };
+}

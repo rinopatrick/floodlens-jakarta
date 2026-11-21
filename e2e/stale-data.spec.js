@@ -86,3 +86,20 @@ test("a fresh reload after stale data clears the notice", async ({ page }) => {
   await expect(page.locator("#staleNotice")).toBeHidden();
   await expect(page.locator("#beforeCount")).toHaveText("5");
 });
+
+test("a refresh cooldown message stays visible after the reload finishes", async ({ page }) => {
+  let cooldown = false;
+  await routeOsm(page, () =>
+    cooldown ? { "x-refresh": "cooldown", "x-refresh-retry-after": "24" } : {},
+  );
+  await page.goto("/");
+  await page.locator("#loadButton").click();
+  await expect(page.locator("#connectionText")).toContainText("siap digunakan");
+
+  cooldown = true;
+  await page.locator("#loadButton").click();
+  await expect(page.locator("#connectionText")).toHaveText("Refresh dibatasi, coba lagi dalam 24 dtk");
+  await page.waitForTimeout(300);
+  await expect(page.locator("#connectionText")).toHaveText("Refresh dibatasi, coba lagi dalam 24 dtk");
+  await expect(page.locator("#beforeCount")).toHaveText("5");
+});
