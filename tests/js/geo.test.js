@@ -1,5 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { polylineIntersectsBounds } from "../../public/src/geo.js";
+
+test("polyline intersection clips segments, not just vertices or bounding boxes", () => {
+  const bounds = { south: 0, west: 0, north: 1, east: 1 };
+  assert.equal(polylineIntersectsBounds([[0.5, 0.5], [2, 2]], bounds), true);
+  assert.equal(polylineIntersectsBounds([[0.5, -2], [0.5, 2]], bounds), true);
+  assert.equal(polylineIntersectsBounds([[2, -1], [2, 2]], bounds), false);
+  assert.equal(polylineIntersectsBounds([[0.9, 2], [2, 0.9]], bounds), false);
+  assert.equal(polylineIntersectsBounds([[1, -1], [1, 2]], bounds), true);
+  assert.equal(polylineIntersectsBounds([], bounds), false);
+  assert.equal(polylineIntersectsBounds([[NaN, 0], [1, 1]], bounds), false);
+  assert.equal(polylineIntersectsBounds([[0, 0]], null), false);
+});
 
 import { describeSnapQuality, distanceMeters, formatKm, isInsideBounds, pointInPolygon, ringAreaSquareMeters } from "../../public/src/geo.js";
 
