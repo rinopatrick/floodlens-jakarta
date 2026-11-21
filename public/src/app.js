@@ -758,6 +758,8 @@ function isInsidePilot(lat, lon) {
       if (error) {
         // Revert to the last accepted shape so the shown results stay current.
         edited.setLatLngs(committedLatLngs.get(edited));
+        // Leaflet.draw's edit handler caches the ring; this re-points it at the restored one.
+        edited.fire("revert-edited", { layer: edited });
         rejectZone(error);
         return;
       }

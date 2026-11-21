@@ -101,6 +101,15 @@ async function drawTinyPolygon(page) {
 }
 
 // The scenario polygons currently drawn on the map, as vertex counts and bounds.
+async function dragOnMap(page, latlng, dx, dy) {
+  const mapBox = await page.locator("#map").boundingBox();
+  const [point] = await containerPoints(page, [latlng]);
+  await page.mouse.move(mapBox.x + point.x, mapBox.y + point.y);
+  await page.mouse.down();
+  await page.mouse.move(mapBox.x + point.x + dx, mapBox.y + point.y + dy, { steps: 5 });
+  await page.mouse.up();
+}
+
 function scenarioPolygons(page) {
   return page.evaluate(() => {
     const polygons = [];
@@ -207,16 +216,29 @@ for (const mode of MODES) {
 
       await page.locator(".leaflet-draw-edit-edit").click();
       // Dragging the midpoint handle between two vertices adds a fifth vertex.
-      const mapBox = await page.locator("#map").boundingBox();
-      const [mid] = await containerPoints(page, [[-6.2005, 106.8315]]);
-      await page.mouse.move(mapBox.x + mid.x, mapBox.y + mid.y);
-      await page.mouse.down();
-      await page.mouse.move(mapBox.x + mid.x, mapBox.y + mid.y + 20, { steps: 5 });
-      await page.mouse.up();
+      await dragOnMap(page, [-6.2005, 106.8315], 0, 20);
       await page.locator(".leaflet-draw-actions a").filter({ hasText: "Simpan" }).click();
 
       await expectZoneRejected(page, "Poligon terlalu detail");
       await expectBridgeScenario(page);
+    });
+
+    test("a valid edit after a rejected edit reshapes the restored zone", async ({ page }) => {
+      await loadFixtureMap(page, { ...mode, maxPolygonVertices: 4 });
+      await drawPolygon(page, RING);
+      await page.locator(".leaflet-draw-edit-edit").click();
+      await dragOnMap(page, [-6.2005, 106.8315], 0, 20);
+      await page.locator(".leaflet-draw-actions a").filter({ hasText: "Simpan" }).click();
+      await expectZoneRejected(page, "Poligon terlalu detail");
+
+      await page.locator(".leaflet-draw-edit-edit").click();
+      await dragOnMap(page, [-6.1995, 106.8318], 0, -30);
+      await page.locator(".leaflet-draw-actions a").filter({ hasText: "Simpan" }).click();
+
+      await expectZoneAccepted(page);
+      const [zone] = await scenarioPolygons(page);
+      expect(zone.vertices).toBe(4);
+      expect(zone.north).toBeGreaterThan(-6.1995);
     });
 
     test("undo after a rejected polygon restores the zone it replaced", async ({ page }) => {
