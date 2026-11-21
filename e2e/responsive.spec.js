@@ -45,6 +45,24 @@ async function enterState(page, state) {
   await expect(page.locator(".leaflet-tile-loaded").first()).toBeVisible();
 }
 
+async function targetSize(locator) {
+  const box = await locator.boundingBox();
+  expect.soft(box.width, `${await locator.evaluate((el) => el.id || el.className)} width`).toBeGreaterThanOrEqual(44);
+  expect.soft(box.height, `${await locator.evaluate((el) => el.id || el.className)} height`).toBeGreaterThanOrEqual(44);
+}
+
+async function visibleFocus(locator) {
+  await expect(locator).toBeFocused();
+  await expect(locator).toBeInViewport({ ratio: 1 });
+  expect(await locator.evaluate((el) => {
+    const style = getComputedStyle(el);
+    const box = el.getBoundingClientRect();
+    return el.matches(":focus-visible") && style.outlineStyle !== "none" &&
+      parseFloat(style.outlineWidth) >= 2 &&
+      el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
+}
+
 for (const layout of layouts) {
   test.describe(layout.name, () => {
     test.use({ viewport: { width: layout.width, height: layout.height } });
@@ -61,7 +79,44 @@ for (const layout of layouts) {
         await expect(credits).toContainText("HERE, Garmin");
         await expect(credits).toContainText("OpenStreetMap contributors");
         await expect(credits).toBeInViewport({ ratio: 1 });
+        if (process.env.RESPONSIVE_SCREENSHOTS) {
+          await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/${layout.name}-${state}.png` });
+        }
+      });
+
+      test(`${state}: controls have real 44px targets`, async ({ page }) => {
+        await enterState(page, state);
+        for (const control of await page.locator(".leaflet-control-zoom a:visible, .leaflet-draw-toolbar a:visible, .leaflet-draw-actions a:visible, #retryButton:visible").all()) {
+          await targetSize(control);
+        }
+        for (const name of ["Data", "Skenario", "Dampak"]) {
+          const tab = page.getByRole("tab", { name, exact: true });
+          await targetSize(tab);
+          await tab.click();
+          for (const control of await page.locator(".panel-section button:visible, .panel-section input:visible").all()) {
+            await targetSize(control);
+          }
+        }
       });
     }
+
+    test("tabs and scenario controls retain visible keyboard focus", async ({ page }) => {
+      await enterState(page, "baseline");
+      const data = page.getByRole("tab", { name: "Data", exact: true });
+      for (let i = 0; i < 30 && !(await data.evaluate((el) => el === document.activeElement)); i++) {
+        await page.keyboard.press("Tab");
+      }
+      await visibleFocus(data);
+      for (const [key, name] of [["ArrowRight", "Skenario"], ["ArrowRight", "Dampak"], ["ArrowRight", "Data"], ["ArrowLeft", "Dampak"], ["Home", "Data"], ["End", "Dampak"], ["ArrowLeft", "Skenario"]]) {
+        await page.keyboard.press(key);
+        const tab = page.getByRole("tab", { name, exact: true });
+        await expect(tab).toHaveAttribute("aria-selected", "true");
+        await visibleFocus(tab);
+      }
+      for (const id of ["originLat", "originLon", "setOriginButton", "applyButton", "clearButton", "fitButton"]) {
+        await page.keyboard.press("Tab");
+        await visibleFocus(page.locator(`#${id}`));
+      }
+    });
   });
 }
