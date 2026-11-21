@@ -1,10 +1,18 @@
 import gzip
 import http.client
 import json
+import socket
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
+import pytest
+
+import floodlens.cache as cache_module
+import floodlens.osm as osm_module
 import server
+from floodlens.cache import TTLCache
 from floodlens.limits import RateLimiter
 
 
@@ -21,13 +29,147 @@ def running_server():
         thread.join(timeout=2)
 
 
-def get(port, path, headers=None):
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    connection.request("GET", path, headers=headers or {})
-    response = connection.getresponse()
-    body = response.read()
-    connection.close()
+def get(port, path, headers=None, *, timeout=5):
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+    try:
+        connection.request("GET", path, headers=headers or {})
+        response = connection.getresponse()
+        body = response.read()
+    finally:
+        connection.close()
     return response, body
+
+
+def get_osm_after_busy(port):
+    deadline = time.monotonic() + 2
+    while True:
+        response, body = get(port, "/api/osm", timeout=1)
+        if response.status != 503 or time.monotonic() >= deadline:
+            return response, body
+        time.sleep(0.01)
+
+
+@contextmanager
+def blocked_osm(monkeypatch, *, stale=None, fail=False):
+    started = threading.Event()
+    release = threading.Event()
+    cache = TTLCache(60 if stale is None else 0)
+    if stale is not None:
+        cache.set(stale)
+
+    def fetch():
+        started.set()
+        if not release.wait(10):
+            raise RuntimeError("test did not release upstream")
+        if fail:
+            raise RuntimeError("upstream failed")
+        return b'{"roads":[],"facilities":[]}'
+
+    monkeypatch.setattr(osm_module, "_fetch_osm_from_upstream", fetch)
+    monkeypatch.setattr(osm_module, "OSM_CACHE", cache)
+    monkeypatch.setattr(server, "OSM_CACHE", cache)
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    monkeypatch.setattr(server.Handler, "api_limiter", RateLimiter(120, 60))
+    try:
+        yield started, release
+    finally:
+        release.set()
+
+
+def test_probes_remain_responsive_when_upstream_slots_are_full(monkeypatch):
+    monkeypatch.setattr(server.Handler, "request_slots", threading.BoundedSemaphore(1))
+    with running_server() as port, ThreadPoolExecutor(1) as pool:
+        with blocked_osm(monkeypatch) as (started, release):
+            pending = pool.submit(get, port, "/api/osm")
+            assert started.wait(2)
+
+            excess, body = get(port, "/api/flood", timeout=1)
+            assert excess.status == 503
+            assert excess.getheader("Retry-After") == "2"
+            assert json.loads(body)["error"]["code"] == "busy"
+
+            health, body = get(port, "/healthz", timeout=1)
+            assert health.status == 200
+            assert json.loads(body)["status"] == "ok"
+
+            readiness, body = get(port, "/readyz", timeout=1)
+            assert readiness.status == 503
+            assert json.loads(body)["status"] == "warming"
+
+            metrics, body = get(port, "/metrics", timeout=1)
+            assert metrics.status == 200
+            assert b"floodlens_cache_age_seconds" in body
+
+            release.set()
+            assert pending.result(timeout=2)[0].status == 200
+            assert get(port, "/readyz")[0].status == 200
+            assert get_osm_after_busy(port)[0].status == 200
+
+
+@pytest.mark.parametrize("stale", [None, b'{"roads":[],"facilities":[],"old":true}'])
+def test_upstream_followers_time_out_without_waiting_for_the_leader(monkeypatch, stale):
+    monkeypatch.setattr(cache_module, "CACHE_FOLLOWER_WAIT_SECONDS", 0.05, raising=False)
+    monkeypatch.setattr(server.Handler, "request_slots", threading.BoundedSemaphore(2))
+    with running_server() as port, ThreadPoolExecutor(1) as pool:
+        with blocked_osm(monkeypatch, stale=stale) as (started, release):
+            leader = pool.submit(get, port, "/api/osm")
+            assert started.wait(2)
+
+            response, body = get(port, "/api/osm", timeout=1)
+            assert not leader.done()
+            if stale is None:
+                assert response.status == 503
+                assert response.getheader("Retry-After") == "2"
+                assert json.loads(body)["error"]["code"] == "busy"
+            else:
+                assert response.status == 200
+                assert response.getheader("X-Data-Stale") == "1"
+                assert body == stale
+
+            release.set()
+            response, body = leader.result(timeout=2)
+            assert response.status == 200
+            assert response.getheader("X-Data-Stale") is None
+            assert json.loads(body) == {"roads": [], "facilities": []}
+
+
+def test_api_capacity_recovers_after_upstream_failure(monkeypatch):
+    monkeypatch.setattr(server.Handler, "request_slots", threading.BoundedSemaphore(1))
+    with running_server() as port, ThreadPoolExecutor(1) as pool:
+        with blocked_osm(monkeypatch, fail=True) as (started, release):
+            pending = pool.submit(get, port, "/api/osm")
+            assert started.wait(2)
+            release.set()
+            response, body = pending.result(timeout=2)
+            assert response.status == 502
+            assert json.loads(body)["error"]["code"] == "upstream_unavailable"
+
+            monkeypatch.setattr(osm_module, "_fetch_osm_from_upstream", lambda: b'{"roads":[]}')
+            assert get_osm_after_busy(port)[0].status == 200
+
+
+def test_api_capacity_recovers_after_client_disconnects(monkeypatch):
+    monkeypatch.setattr(server.Handler, "request_slots", threading.BoundedSemaphore(1))
+    with running_server() as port, blocked_osm(monkeypatch) as (started, release):
+        with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
+            client.sendall(b"GET /api/osm HTTP/1.0\r\n\r\n")
+            assert started.wait(2)
+            client.shutdown(socket.SHUT_RDWR)
+
+        release.set()
+        assert get_osm_after_busy(port)[0].status == 200
+
+
+def test_server_closes_client_socket_when_request_stalls(monkeypatch):
+    if server.Handler.timeout is not None:
+        monkeypatch.setattr(server.Handler, "timeout", 0.05)
+
+    with running_server() as port:
+        with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
+            client.sendall(b"GET /healthz HTTP/1.0\r\n")
+            assert client.recv(1) == b""
+
+        assert get(port, "/healthz")[0].status == 200
 
 
 def test_index_is_served():

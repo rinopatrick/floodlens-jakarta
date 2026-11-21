@@ -8,7 +8,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
+from floodlens.config import CACHE_FOLLOWER_WAIT_SECONDS
+
 T = TypeVar("T")
+
+
+class CacheWaitTimeout(TimeoutError):
+    """An in-flight fetch did not finish in time and no cached value is available."""
 
 
 @dataclass
@@ -106,8 +112,12 @@ class TTLCache(Generic[T]):
                 self._entry = _Entry(self._clock(), value)
             return value, False
 
-        slot.event.wait()
+        completed = slot.event.wait(CACHE_FOLLOWER_WAIT_SECONDS)
         with self._lock:
+            if not completed:
+                if self._entry is not None:
+                    return self._entry.value, True
+                raise CacheWaitTimeout("Timed out waiting for an in-flight fetch")
             if slot.error is not None:
                 if self._entry is not None:
                     return self._entry.value, True

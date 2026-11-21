@@ -89,6 +89,7 @@ Run these before tagging a release. CI covers the first four. The last two need 
 Production notes:
 
 - The cache is in-memory and per process. Run a single instance or add a shared cache before scaling horizontally. `GET /readyz` returns 503 while cold and 200 once OSM or fixture data is present.
+- For a single instance behind platform ingress, `/api/osm` and `/api/flood` share 16 concurrent slots; excess requests get `503 busy` with `Retry-After`. `/healthz`, `/readyz`, and `/metrics` do not use those slots. Cache followers wait at most 240 seconds, then get stale data if available or `503 busy`. Client socket I/O times out after 10 seconds of inactivity. Overpass can attempt three endpoints with a 75-second timeout each (225 seconds across the attempts if each times out once; socket timeouts are not a wall-clock deadline). Ingress must enforce its own connection and request limits: the app still starts a thread per accepted connection, and these budgets are not DoS protection.
 - The server is read-only and stores no user data. It has no authentication. Rate limiting is in-process: 120 API requests per minute per client/path, plus a 30-second refresh cooldown. API responses carry `X-RateLimit-Limit` and `X-RateLimit-Remaining`.
 - Oversize request targets return 414. Polygon rings above the server `maxPolygonVertices` limit are rejected in the client with an inline map error.
 - `/api/osm` is gzip-compressed, sends an ETag, and allows a 60-second browser cache with stale-while-revalidate. The server cache remains 15 minutes.

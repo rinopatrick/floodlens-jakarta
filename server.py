@@ -14,8 +14,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from floodlens.cache import CacheWaitTimeout
 from floodlens.config import (
     APP_VERSION,
+    CLIENT_SOCKET_TIMEOUT_SECONDS,
     CONTENT_SECURITY_POLICY,
     EAST,
     FLOOD_BROWSER_TTL,
@@ -39,6 +41,7 @@ from floodlens.osm import OSM_CACHE, fetch_osm_with_staleness, simplify_osm
 
 class Handler(SimpleHTTPRequestHandler):
     fixture_dir: Path | None = None
+    timeout = CLIENT_SOCKET_TIMEOUT_SECONDS
     request_slots = threading.BoundedSemaphore(16)
     api_limiter = RateLimiter(limit=120, window_seconds=60)
     refresh_cooldown = Cooldown(seconds=30)
@@ -220,6 +223,14 @@ class Handler(SimpleHTTPRequestHandler):
         headers.extend(guard_headers)
         return refresh, headers
 
+    def _send_busy(self) -> None:
+        self.send_error_json(
+            "Server sedang sibuk. Coba lagi.",
+            status=503,
+            code="busy",
+            retry_after=2,
+        )
+
     def do_GET(self) -> None:
         started = time.monotonic()
         self.request_id = uuid.uuid4().hex[:12]
@@ -235,22 +246,16 @@ class Handler(SimpleHTTPRequestHandler):
             self._write_access_log(parsed.path, started)
             return
 
-        if not self.request_slots.acquire(blocking=False):
-            self.send_error_json(
-                "Server sedang sibuk. Coba lagi.",
-                status=503,
-                code="busy",
-                retry_after=2,
-            )
+        api_path = parsed.path in {"/api/osm", "/api/flood"}
+        if api_path and not self.request_slots.acquire(blocking=False):
+            self._send_busy()
             self._write_access_log(parsed.path, started)
             return
 
         try:
-            api_path = parsed.path in {"/api/osm", "/api/flood"}
             if api_path:
                 allowed, _retry = self._allow_api(parsed.path)
                 if not allowed:
-                    self._write_access_log(parsed.path, started)
                     return
 
             if parsed.path == "/api/config":
@@ -359,6 +364,8 @@ class Handler(SimpleHTTPRequestHandler):
                             compress=True,
                             extra_headers=tuple(headers),
                         )
+                except CacheWaitTimeout:
+                    self._send_busy()
                 except Exception as exc:
                     self._write_error_log(parsed.path, exc)
                     if fixture:
@@ -398,6 +405,8 @@ class Handler(SimpleHTTPRequestHandler):
                             etag=True,
                             extra_headers=tuple(extra),
                         )
+                except CacheWaitTimeout:
+                    self._send_busy()
                 except Exception as exc:
                     self._write_error_log(parsed.path, exc)
                     if fixture:
@@ -415,7 +424,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             super().do_GET()
         finally:
-            self.request_slots.release()
+            if api_path:
+                self.request_slots.release()
             self._write_access_log(parsed.path, started)
 
 
