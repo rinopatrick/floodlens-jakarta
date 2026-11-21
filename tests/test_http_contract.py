@@ -218,6 +218,32 @@ def test_osm_supports_gzip_and_etag(monkeypatch):
     assert empty == b""
 
 
+def test_osm_omits_non_ascii_timestamp_header(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    payload = json.dumps({"dataTimestamp": "Waktu tidak tersedia —"}).encode()
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", lambda _refresh=False: (payload, False))
+
+    with running_server() as port:
+        response, body = get(port, "/api/osm")
+
+    assert response.status == 200
+    assert response.getheader("X-Data-Timestamp") is None
+    assert body == payload
+
+
+def test_osm_omits_timestamp_header_with_crlf(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    payload = json.dumps({"dataTimestamp": "2026-01-01T00:00:00Z\r\n"}).encode()
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", lambda _refresh=False: (payload, False))
+
+    with running_server() as port:
+        response, body = get(port, "/api/osm")
+
+    assert response.status == 200
+    assert response.getheader("X-Data-Timestamp") is None
+    assert body == payload
+
+
 def test_api_responses_carry_rate_limit_headers(monkeypatch):
     monkeypatch.setattr(server.Handler, "fixture_dir", None)
     monkeypatch.setattr(

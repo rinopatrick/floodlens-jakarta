@@ -338,8 +338,13 @@ class Handler(SimpleHTTPRequestHandler):
                         body, stale = fetch_osm_with_staleness(refresh)
                         payload = json.loads(body)
                         timestamp = payload.get("dataTimestamp", "")
-                        if timestamp:
-                            headers.append(("X-Data-Timestamp", str(timestamp)))
+                        if (
+                            isinstance(timestamp, str)
+                            and timestamp
+                            and timestamp.isascii()
+                            and timestamp.isprintable()
+                        ):
+                            headers.append(("X-Data-Timestamp", timestamp))
                         if stale:
                             headers.append(("X-Data-Stale", "1"))
                         age = OSM_CACHE.age()
