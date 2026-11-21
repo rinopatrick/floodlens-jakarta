@@ -1,6 +1,5 @@
 import {
   DEFAULT_ORIGIN,
-  FLOOD_BOUNDS,
   MAX_ACCESS_METERS as MAX_ACCESS_FALLBACK,
   PILOT_BOUNDS as PILOT_FALLBACK,
   TILE_LAYER,
@@ -78,16 +77,28 @@ function isInsidePilot(lat, lon) {
       attribution: TILE_LAYER.attribution
     }).addTo(map);
 
-    const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
-    hazardOverlay.addTo(map);
-    hazardOverlay.on("load", () => {
-      if ($("app").dataset.fixture === "true") return;
-      setSourceState("bnpbState", "LAYER AKTIF", "ready");
-    });
-    hazardOverlay.on("error", () => {
-      setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
-      showMapError("Layer BNPB tidak dapat dimuat. Peta dasar dan simulasi jaringan tetap bisa digunakan.");
-    });
+    let hazardOverlay = null;
+
+    function addHazardOverlay(bounds) {
+      if (!bounds || ![bounds.south, bounds.west, bounds.north, bounds.east].every(Number.isFinite)
+        || bounds.south < -90 || bounds.north > 90 || bounds.south >= bounds.north
+        || bounds.west < -180 || bounds.east > 180 || bounds.west >= bounds.east) return;
+      const query = new URLSearchParams({ bbox: [bounds.west, bounds.south, bounds.east, bounds.north].join(",") });
+      hazardOverlay = L.imageOverlay(`/api/flood?${query}`, [[bounds.south, bounds.west], [bounds.north, bounds.east]], { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
+      hazardOverlay.on("load", () => {
+        if ($("app").dataset.fixture === "true") return;
+        setSourceState("bnpbState", "LAYER AKTIF", "ready");
+      });
+      hazardOverlay.on("error", () => {
+        setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
+        showMapError("Layer BNPB tidak dapat dimuat. Peta dasar dan simulasi jaringan tetap bisa digunakan.");
+      });
+      hazardOverlay.addTo(map);
+      $("hazardToggle").checked = true;
+      $("hazardToggle").disabled = false;
+      $("app").dataset.hazard = "on";
+      overlayVisible = true;
+    }
 
     const roadsLayer = L.layerGroup().addTo(map);
     const facilitiesLayer = L.layerGroup().addTo(map);
@@ -188,10 +199,17 @@ function isInsidePilot(lat, lon) {
       }
     }
     async function loadRuntimeConfig() {
+      setSourceState("bnpbState", "MEMUAT", "");
+      $("hazardToggle").checked = false;
+      $("hazardToggle").disabled = true;
+      $("app").dataset.hazard = "off";
+      overlayVisible = false;
       try {
         const response = await fetch("/api/config", { signal: AbortSignal.timeout(5000) });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const config = await response.json();
+        addHazardOverlay(config.floodBounds);
+        if (!hazardOverlay) setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
         // Single source of truth: server owns bounds and threshold.
         if (config.pilotBounds && Number.isFinite(config.pilotBounds.south)) {
           PILOT_BOUNDS = { ...config.pilotBounds };
@@ -215,13 +233,14 @@ function isInsidePilot(lat, lon) {
         $("app").dataset.fixture = "true";
         $("loadButtonText").textContent = "Muat data contoh";
         $("sourceNote").textContent = "Mode fixture: snapshot lokal untuk demo dan test. Data live tidak diambil.";
-        setSourceState("bnpbState", "FIXTURE · NONAKTIF", "");
+        if (hazardOverlay) setSourceState("bnpbState", "FIXTURE · NONAKTIF", "");
         $("hazardToggle").checked = false;
         $("hazardToggle").disabled = true;
         $("app").dataset.hazard = "off";
         overlayVisible = false;
-        if (map.hasLayer(hazardOverlay)) map.removeLayer(hazardOverlay);
+        if (hazardOverlay && map.hasLayer(hazardOverlay)) map.removeLayer(hazardOverlay);
       } catch {
+        setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
         // Keep the live-data path when the runtime config is unavailable.
       }
     }
@@ -777,6 +796,7 @@ function isInsidePilot(lat, lon) {
     $("originLat").addEventListener("change", applyCoordinateInput);
     $("originLon").addEventListener("change", applyCoordinateInput);
     $("hazardToggle").addEventListener("change", (event) => {
+      if (!hazardOverlay) return;
       overlayVisible = event.target.checked;
       $("app").dataset.hazard = overlayVisible ? "on" : "off";
       setSourceState("bnpbState", overlayVisible ? "LAYER AKTIF" : "NONAKTIF", overlayVisible ? "ready" : "");

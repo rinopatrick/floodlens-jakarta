@@ -81,6 +81,58 @@ def test_roads_preserve_oneway_and_names():
     assert roads["101"]["points"][0]["id"] == "1"
 
 
+@pytest.mark.parametrize(
+    ("latitudes", "expected_runs"),
+    [
+        pytest.param(
+            [-6.2, -6.2, -6.4, -6.2, -6.2],
+            [("9.0", [1, 2]), ("9.1", [4, 5])],
+            id="out-of-bounds-middle",
+        ),
+        pytest.param([None, -6.2, -6.2], [("9.0", [2, 3])], id="invalid-first"),
+        pytest.param([-6.2, -6.2, None], [("9.0", [1, 2])], id="invalid-last"),
+        pytest.param([None, "invalid", -6.4], [], id="all-invalid"),
+        pytest.param(
+            [-6.2, -6.2, 10**400, -6.2, -6.2],
+            [("9.0", [1, 2]), ("9.1", [4, 5])],
+            id="overflowing-coordinate",
+        ),
+        pytest.param([-6.2, -6.2, -6.2], [("9", [1, 2, 3])], id="fully-valid"),
+        pytest.param(
+            [-6.2, -6.2, None, -6.2, "invalid", -6.2, -6.2],
+            [("9.0", [1, 2]), ("9.1", [6, 7])],
+            id="drop-singleton-between-gaps",
+        ),
+    ],
+)
+def test_roads_keep_only_contiguous_valid_runs(latitudes, expected_runs):
+    nodes = list(range(1, len(latitudes) + 1))
+    geometry = [
+        {"lat": lat, "lon": 106.83 + index / 1000}
+        for index, lat in enumerate(latitudes)
+    ]
+    way = {
+        "type": "way",
+        "id": 9,
+        "nodes": nodes,
+        "geometry": geometry,
+        "tags": {"highway": "primary", "name": "Jembatan", "oneway": "-1"},
+    }
+
+    roads = json.loads(simplify_osm({"elements": [way]}))["roads"]
+
+    assert roads == [
+        {
+            "id": road_id,
+            "name": "Jembatan",
+            "kind": "primary",
+            "oneway": "-1",
+            "points": [{"id": str(node), **geometry[node - 1]} for node in run],
+        }
+        for road_id, run in expected_runs
+    ]
+
+
 def test_facilities_are_deduped_and_classified():
     facilities = simplified()["facilities"]
     by_name = {facility["name"]: facility for facility in facilities}
