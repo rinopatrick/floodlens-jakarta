@@ -30,6 +30,10 @@ Open [http://localhost:8766](http://localhost:8766), select **Muat data live Jak
 
 The browser never calls Overpass or BNPB directly. It requests `/api/osm` and `/api/flood` from the local server, which handles caching, upstream fallback, and response validation. Basemap tiles are served by Esri World Street Map.
 
+### Stale data
+
+When an Overpass refresh fails but an earlier OSM response is cached, `/api/osm` serves the cached data with `X-Data-Stale: 1` and `X-Data-Age` (seconds since it was fetched). Stale fallback has **no maximum age**: cached data of any age is preferred over an error, so routes and metrics keep working. The UI says so instead of reporting a successful refresh: the status bar reads *Memakai data cache, pembaruan gagal* and the data panel shows a notice (announced via `role="status"`) that refresh from OpenStreetMap failed, with the age (for example *± 3 jam lalu*) when `X-Data-Age` is a valid non-negative integer. The next fresh load clears the notice. The flood overlay's staleness is not shown.
+
 ## Configuration
 
 | Variable | Default | Purpose |

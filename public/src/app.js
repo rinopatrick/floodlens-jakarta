@@ -9,6 +9,7 @@ import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } f
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
 import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
+import { describeStaleNotice, readStaleness } from "./staleness.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
 let MAX_POLYGON_VERTICES = 512;
@@ -160,7 +161,12 @@ function isInsidePilot(lat, lon) {
       if (!Array.isArray(data.roads) || !Array.isArray(data.facilities)) {
         throw new Error("Respons data jalan tidak lengkap.");
       }
-      return data;
+      return { data, ...readStaleness(response.headers) };
+    }
+    function showStaleNotice(stale, ageSeconds) {
+      const notice = $("staleNotice");
+      notice.textContent = stale ? describeStaleNotice(ageSeconds) : "";
+      notice.hidden = !stale;
     }
     function setStatus(text, state = "") {
       connectionText.textContent = text;
@@ -642,7 +648,7 @@ function isInsidePilot(lat, lon) {
       activeLoadController = new AbortController();
       try {
         setLoading(true);
-        const payload = await fetchOsmData(refresh, activeLoadController.signal);
+        const { data: payload, stale, ageSeconds } = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
         spatialIndex = buildSpatialIndex(graphData.nodes);
@@ -653,7 +659,7 @@ function isInsidePilot(lat, lon) {
         drawRoads();
         setupAnalysisWorker();
         setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
-        setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, "ready");
+        setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, stale ? "stale" : "ready");
         $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;
         let stamp = "";
         if (payload.dataTimestamp) {
@@ -670,7 +676,12 @@ function isInsidePilot(lat, lon) {
         }
         hasLoadedData = true;
         const fixture = $("app").dataset.fixture === "true";
-        setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
+        showStaleNotice(stale, ageSeconds);
+        if (stale) {
+          setStatus("Memakai data cache, pembaruan gagal", "stale");
+        } else {
+          setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
+        }
         $("loadButtonText").textContent = fixture ? "Perbarui data contoh" : "Perbarui data live";
         setAppState(activePolygon ? "result" : "baseline");
         updateInstructions("Baseline aktif", "Klik peta untuk mengubah titik awal, atau gambar zona terdampak.", false);
@@ -688,6 +699,7 @@ function isInsidePilot(lat, lon) {
             : ($("app").dataset.fixture === "true" ? "Muat data contoh" : "Muat data live");
         } else {
           hasLoadedData = false;
+          showStaleNotice(false);
           setSourceState("osmState", "GAGAL DIMUAT", "error");
           setStatus("Data tidak dapat diakses", "");
           setAppState("error");
