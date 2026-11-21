@@ -64,6 +64,42 @@ npx playwright test
 
 The Playwright suite starts the server in fixture mode. It never calls live Overpass or BNPB services.
 
+### Road-overlay performance (issue #23)
+
+Reproduce with Node 22 and the Python virtual environment on `PATH`:
+
+```sh
+npx playwright test e2e/roads.spec.js -g 'large fixture'
+ROAD_BASELINE=1 npx playwright test e2e/roads.spec.js -g 'large fixture'
+```
+
+The baseline mode serves `master:public/src/app.js` with timing instrumentation only;
+run it while `master` still points at the pre-fix version. The test generates 1,600
+two-point residential roads in addition to the 10 sample roads (1,610 total),
+all eligible and initially visible. It then moves to `[-6.20, 106.8302]`, zoom 19,
+where over 1,600 roads intersect the viewport, and checks supersession with six
+rapid movements to a final empty viewport. No upstream services are used.
+
+Measured on Ubuntu, headless Playwright Chromium 156.0.8078.4, viewport 1280×720,
+without CPU throttling (single run, not a statistical benchmark):
+
+| Measurement | Before (`master`) | After |
+| --- | --- | --- |
+| Settled movement to completed redraw | No redraw; still stale after 1,000 ms | 307.6 ms |
+| Longest observed main-thread long task, load through movement | 0 ms | 0 ms |
+| Initial synchronous road-draw duration | 15.6 ms | Not synchronous |
+
+Zero means the `PerformanceObserver` saw no task at or above its 50 ms reporting
+threshold, not that rendering took no time. There is no valid pre-fix redraw
+latency: movement never invoked road drawing. The baseline assertion explicitly
+checks the stale 1,610-layer overlay rather than treating inactivity as a fast
+redraw. After-fix timing starts before `moveend` dispatch and ends at the
+`roads:rendered` event after the last batch (layer completion, not tile loading or
+final canvas paint). Browser timers must run during that redraw. Batches scan at
+most 100 roads or approximately 8 ms of work, then yield through an animation
+frame and timer; a generation token prevents superseded work from adding layers.
+These measurements show correctness and responsiveness, not a measured speedup.
+
 ## Deploy
 
 Build and run the container:
