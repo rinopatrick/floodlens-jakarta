@@ -334,6 +334,9 @@ h1, h2, h3, p { margin-top: 0; }
 .map-instruction .attribution { margin-top: 2px; }
 .map-instruction.is-drawing { border-color: var(--rust); }
 .map-instruction.is-drawing .instruction-mark { border-color: var(--rust); color: var(--rust); }
+.map-instruction.is-error { border-color: var(--error); }
+.map-instruction.is-error .instruction-mark { border-color: var(--error); color: var(--error); }
+.map-instruction.is-error .instruction-copy strong { color: var(--error); }
 #app[data-state="empty"] .map-legend { opacity: .82; }
 
 /* Leaflet controls */
