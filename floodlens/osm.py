@@ -35,6 +35,10 @@ ALLOWED_ROADS = {
 }
 
 
+class InvalidOverpassResponse(ValueError):
+    """The upstream response is not a successful Overpass envelope."""
+
+
 def overpass_query() -> str:
     bbox = f"{SOUTH},{WEST},{NORTH},{EAST}"
     return f"""[out:json][timeout:60];
@@ -167,13 +171,18 @@ def _process_road(element: dict, roads: list[dict]) -> None:
 
 
 def simplify_osm(payload: dict) -> bytes:
+    if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
+        raise InvalidOverpassResponse("Overpass response elements must be a list")
+    remark = payload.get("remark")
+    if isinstance(remark, str) and any(
+        marker in remark.casefold() for marker in ("error", "timed out")
+    ):
+        raise InvalidOverpassResponse("Overpass response contains an error remark")
     roads: list[dict] = []
     facilities: list[dict] = []
     seen_facilities: set[tuple[str, str, int, int]] = set()
 
-    elements = payload.get("elements") if isinstance(payload, dict) else []
-    if not isinstance(elements, list):
-        elements = []
+    elements = payload["elements"]
     for element in elements:
         # One malformed element must not poison the whole payload.
         try:
@@ -227,6 +236,7 @@ def _fetch_osm_from_upstream() -> bytes:
             OSError,
             json.JSONDecodeError,
             KeyError,
+            InvalidOverpassResponse,
         ) as exc:
             last_error = exc
             if endpoint != OVERPASS_ENDPOINTS[-1]:
