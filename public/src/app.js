@@ -1,6 +1,5 @@
 import {
   DEFAULT_ORIGIN,
-  FLOOD_BOUNDS,
   MAX_ACCESS_METERS as MAX_ACCESS_FALLBACK,
   PILOT_BOUNDS as PILOT_FALLBACK,
   TILE_LAYER,
@@ -78,16 +77,20 @@ function isInsidePilot(lat, lon) {
       attribution: TILE_LAYER.attribution
     }).addTo(map);
 
-    const hazardOverlay = L.imageOverlay("/api/flood", FLOOD_BOUNDS, { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
-    hazardOverlay.addTo(map);
-    hazardOverlay.on("load", () => {
-      if ($("app").dataset.fixture === "true") return;
-      setSourceState("bnpbState", "LAYER AKTIF", "ready");
-    });
-    hazardOverlay.on("error", () => {
-      setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
-      showMapError("Layer BNPB tidak dapat dimuat. Peta dasar dan simulasi jaringan tetap bisa digunakan.");
-    });
+    let hazardOverlay = null;
+
+    function addHazardOverlay(bounds) {
+      hazardOverlay = L.imageOverlay("/api/flood", [[bounds.south, bounds.west], [bounds.north, bounds.east]], { opacity: .3, interactive: false, className: "hazard-overlay", alt: "Layer bahaya banjir BNPB untuk Jabodetabekpunjur" });
+      hazardOverlay.on("load", () => {
+        if ($("app").dataset.fixture === "true") return;
+        setSourceState("bnpbState", "LAYER AKTIF", "ready");
+      });
+      hazardOverlay.on("error", () => {
+        setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
+        showMapError("Layer BNPB tidak dapat dimuat. Peta dasar dan simulasi jaringan tetap bisa digunakan.");
+      });
+      hazardOverlay.addTo(map);
+    }
 
     const roadsLayer = L.layerGroup().addTo(map);
     const facilitiesLayer = L.layerGroup().addTo(map);
@@ -192,6 +195,7 @@ function isInsidePilot(lat, lon) {
         const response = await fetch("/api/config", { signal: AbortSignal.timeout(5000) });
         if (!response.ok) return;
         const config = await response.json();
+        addHazardOverlay(config.floodBounds);
         // Single source of truth: server owns bounds and threshold.
         if (config.pilotBounds && Number.isFinite(config.pilotBounds.south)) {
           PILOT_BOUNDS = { ...config.pilotBounds };

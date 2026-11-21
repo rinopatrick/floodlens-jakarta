@@ -1,8 +1,3 @@
-export const FLOOD_BOUNDS = [
-  [-6.43, 106.59],
-  [-5.99, 107.1],
-];
-
 export const PILOT_BOUNDS = {
   south: -6.26,
   west: 106.78,
