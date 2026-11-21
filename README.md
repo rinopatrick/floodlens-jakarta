@@ -106,7 +106,7 @@ The map overlay is rendered from BNPB's [InaRISK flood-hazard MapServer for Jabo
 
 ### Roads and health facilities
 
-The app requests motorway, trunk, primary, secondary, tertiary, residential, and unclassified road ways plus mapped hospital and clinic features from [OpenStreetMap](https://www.openstreetmap.org/) through the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API), limited to the Central Jakarta pilot bounding box in the source code. OSM data is licensed under the [Open Database License](https://www.openstreetmap.org/copyright); attribution is shown on the map. Basemap tiles are rendered by Esri World Street Map with HERE, Garmin, and OpenStreetMap contributors; attribution is shown in the legend.
+The app requests motorway, trunk, primary, secondary, tertiary, residential, and unclassified road ways plus mapped hospital and clinic features from [OpenStreetMap](https://www.openstreetmap.org/) through the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API), limited to the Central Jakarta pilot bounding box in the source code. OSM data is licensed under the [Open Database License](https://www.openstreetmap.org/copyright); attribution is shown on the map. Basemap tiles are rendered by Esri World Street Map with HERE, Garmin, and OpenStreetMap contributors; credits appear in the enabled Leaflet attribution control, without the Leaflet prefix, independently of the legend's visibility.
 
 OSM data is community-mapped and can be incomplete or out of date. FloodLens only includes features present in the response for its bounded Jakarta pilot area.
 

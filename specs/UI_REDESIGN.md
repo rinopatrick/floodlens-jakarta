@@ -65,7 +65,7 @@ The state is applied to `#app[data-state]`; the strip reflects the active state.
 - Basemap tiles (Esri World Street Map) receive a restrained grayscale/sepia filter; the BNPB overlay uses multiply blending and is hidden in empty/error states.
 - Routes use the existing `--baseline` / `--teal` aliases; closed segments use `--coral` / `--rust`.
 - Facility rows are `<li>` elements with numbered index, name, and scenario distance.
-- The map attribution control is disabled; attribution is kept in the legend and the README.
+- The Leaflet attribution control is enabled without its prefix; configured basemap and contributor credits remain visible independently of the optional legend, with no duplicate legend credit.
 - A persistent footer states that the scenario is illustrative, not a flood prediction or emergency route, and that 5 km is a display choice.
 
 ## Verification
