@@ -68,6 +68,56 @@ npx playwright test
 
 The Playwright suite starts the server in fixture mode. It never calls live Overpass or BNPB services.
 
+### Road-overlay performance (issue #23)
+
+Reproduce with Node 22 and the Python virtual environment on `PATH`:
+
+```sh
+node scripts/benchmark-roads.mjs --app-ref 2325e0195f1484a1145dbd42680b7cb7bfc5e462
+node scripts/benchmark-roads.mjs
+node scripts/benchmark-roads.mjs --live
+```
+
+The script starts its own server on port 8768 and compares an explicit immutable
+pre-review-fix commit with the working tree; the behaviour specs never read git
+refs. `scripts/road-fixture.mjs` generates 20,000 eligible two-point roads: the
+10 sample roads, 19,790 spread across the pilot bounds, and 200 near the origin.
+The same fixture powers the under-1-second pan and cancellation regressions.
+Synthetic runs stub OSM and tiles; `--live` starts without a fixture directory
+and loads the actual `/api/osm` response instead.
+
+Measured on Ubuntu, headless Playwright Chromium 156.0.8078.4, viewport 1280×720,
+without CPU throttling (single run, not a statistical benchmark):
+
+| Measurement | Before (`2325e01`) | After |
+| --- | --- | --- |
+| Zoom 19, 50 px pan: redraw latency | 3,312.7 ms | 0.1 ms |
+| Zoom 19: longest long task | 0 ms | 0 ms |
+| Auto-fit zoom 12, all 20,000 visible: redraw latency | 3,329.1 ms | 129.1 ms |
+| Auto-fit: longest long task | 0 ms | 0 ms |
+
+At street level 216 roads intersect the actual viewport. Before, 216 layers are
+rebuilt; after, 236 layers are retained in the padded viewport. The 50 px pan
+fits inside that padding and skips layer work. Auto-fit expands from the street
+view to all 20,000 roads and exercises time-budgeted additions. Zoom changes
+always recull, even inside the previous padded bounds, to avoid retaining the
+entire pilot network when zooming in.
+
+Zero means the `PerformanceObserver` saw no task at or above its 50 ms reporting
+threshold, not that rendering took no time. Latency starts before `moveend`
+dispatch and ends at `roads:rendered` (layer completion, not tile loading).
+The long-task observation window includes two subsequent animation frames to
+include canvas painting. Eligible geometry, bboxes and styles are prepared once
+per load; uncached redraws synchronously bbox-reject and segment-clip candidates.
+Only layer additions/removals yield at an approximately 8 ms budget. Kept road
+layers retain their identity, and generation checks discard superseded work.
+
+Live Central Jakarta attempt: the non-fixture server returned HTTP 502 with
+`upstream_unavailable` / `Sumber data OpenStreetMap tidak tersedia. Coba lagi
+beberapa saat.` Overpass was unavailable from this environment, so no live road
+count or live timings could be measured; the 20k synthetic results are not
+presented as a live-data benchmark.
+
 ## Deploy
 
 Build and run the container:

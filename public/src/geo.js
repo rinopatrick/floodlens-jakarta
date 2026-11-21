@@ -1,3 +1,28 @@
+export function polylineIntersectsBounds(points, bounds) {
+  if (!bounds) return false;
+  for (let i = 1; i < points.length; i++) {
+    const [y, x] = points[i - 1];
+    const [endY, endX] = points[i];
+    if (![y, x, endY, endX].every(Number.isFinite)) continue;
+    const dx = endX - x, dy = endY - y;
+    let start = 0, end = 1;
+    const edges = [[-dx, x - bounds.west], [dx, bounds.east - x], [-dy, y - bounds.south], [dy, bounds.north - y]];
+    let intersects = true;
+    for (const [direction, distance] of edges) {
+      if (direction === 0) {
+        if (distance < 0) { intersects = false; break; }
+      } else {
+        const ratio = distance / direction;
+        if (direction < 0) start = Math.max(start, ratio);
+        else end = Math.min(end, ratio);
+        if (start > end) { intersects = false; break; }
+      }
+    }
+    if (intersects) return true;
+  }
+  return false;
+}
+
 export function distanceMeters(a, b) {
   const radius = 6371000;
   const radians = Math.PI / 180;
