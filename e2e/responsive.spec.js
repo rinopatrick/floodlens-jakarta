@@ -79,6 +79,18 @@ for (const layout of layouts) {
         await expect(credits).toContainText("HERE, Garmin");
         await expect(credits).toContainText("OpenStreetMap contributors");
         await expect(credits).toBeInViewport({ ratio: 1 });
+        const surfaces = await page.locator(".map-empty:visible, .map-error:visible, .map-legend:visible, .map-instruction:visible, .leaflet-control-zoom:visible, .leaflet-draw-toolbar:visible, .leaflet-control-scale:visible, .leaflet-control-attribution:visible").evaluateAll((elements) => elements.map((el) => ({
+          name: el.className,
+          box: el.getBoundingClientRect().toJSON(),
+        })));
+        for (let i = 0; i < surfaces.length; i++) {
+          for (const other of surfaces.slice(i + 1)) {
+            const { box, name } = surfaces[i];
+            const overlap = Math.min(box.right, other.box.right) > Math.max(box.left, other.box.left) &&
+              Math.min(box.bottom, other.box.bottom) > Math.max(box.top, other.box.top);
+            expect.soft(overlap, `${name} overlaps ${other.name}`).toBe(false);
+          }
+        }
         if (process.env.RESPONSIVE_SCREENSHOTS) {
           await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/${layout.name}-${state}.png` });
         }
