@@ -32,6 +32,30 @@ test("short mobile error keeps inspector controls reachable", async ({ page }) =
   }
 });
 
+test("short narrow BNPB inspector controls remain reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 480 });
+  await enterState(page, "empty", { bnpb: true });
+  const load = page.locator("#loadButton");
+  await load.scrollIntoViewIfNeeded({ timeout: 1000 });
+  await expect(load).toBeInViewport({ ratio: 1, timeout: 1000 });
+  await load.click({ timeout: 1000 });
+  await expect(page.locator("#app")).toHaveAttribute("data-state", "baseline");
+  await page.getByRole("tab", { name: "Skenario", exact: true }).click();
+  for (const id of ["originLat", "originLon", "setOriginButton", "fitButton"]) {
+    const control = page.locator(`#${id}`);
+    await control.scrollIntoViewIfNeeded({ timeout: 1000 });
+    await expect(control).toBeInViewport({ ratio: 1, timeout: 1000 });
+    expect(await control.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }), id).toBe(true);
+    await control.click({ trial: true, timeout: 1000 });
+  }
+  if (process.env.RESPONSIVE_SCREENSHOTS) {
+    await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/360x480-bnpb-inspector.png` });
+  }
+});
+
 async function enterState(page, state, { bnpb = false, errorMessage = "Sumber data OpenStreetMap tidak tersedia." } = {}) {
   if (bnpb) {
     await page.route("**/api/config", async (route) => {
