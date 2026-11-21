@@ -9,6 +9,8 @@ test("polyline intersection clips segments, not just vertices or bounding boxes"
   assert.equal(polylineIntersectsBounds([[2, -1], [2, 2]], bounds), false);
   assert.equal(polylineIntersectsBounds([[0.9, 2], [2, 0.9]], bounds), false);
   assert.equal(polylineIntersectsBounds([[1, -1], [1, 2]], bounds), true);
+  assert.equal(polylineIntersectsBounds([[1, 1], [2, 2]], bounds), true);
+  assert.equal(polylineIntersectsBounds([[-1, 1], [1, -1]], bounds), true);
   assert.equal(polylineIntersectsBounds([], bounds), false);
   assert.equal(polylineIntersectsBounds([[NaN, 0], [1, 1]], bounds), false);
   assert.equal(polylineIntersectsBounds([[0, 0]], null), false);
