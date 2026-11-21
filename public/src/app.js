@@ -8,12 +8,11 @@ import {
 import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } from "./geo.js";
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
-import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
+import { buildGraph, dijkstra, nearestNodeWithDistance } from "./graph.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
 let MAX_POLYGON_VERTICES = 512;
 let MIN_POLYGON_AREA_M2 = 100;
-let spatialIndex = null;
 
 function isInsidePilot(lat, lon) {
   return isInsideBounds(lat, lon, PILOT_BOUNDS);
@@ -239,7 +238,7 @@ function isInsidePilot(lat, lon) {
         const match = nearestNodeWithDistance(graphData.nodes, {
           lat: facility.lat,
           lon: facility.lon,
-        }, spatialIndex);
+        });
         return match
           ? { ...facility, nodeId: match.nodeId, snapDistance: match.distance }
           : null;
@@ -520,7 +519,7 @@ function isInsidePilot(lat, lon) {
       const snap = nearestNodeWithDistance(graphData.nodes, {
         lat: origin.lat,
         lon: origin.lon,
-      }, spatialIndex);
+      });
       if (!snap) return;
       originSnap = {
         lat: snap.coord[0],
@@ -645,7 +644,6 @@ function isInsidePilot(lat, lon) {
         const payload = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
-        spatialIndex = buildSpatialIndex(graphData.nodes);
         baselineCache = { key: null, result: null };
         originSnap = null;
         const nodeCount = graphData.nodes.size;
