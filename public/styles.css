@@ -715,6 +715,7 @@ h1, h2, h3, p { margin-top: 0; }
 }
 @media (max-height: 600px) and (min-width: 721px) {
   .map-legend { display: none; }
+  .hazard-badge { top: 136px; padding: 3px 8px; font-size: 9px; }
   .leaflet-bottom.leaflet-left { bottom: 20px; }
   .map-empty { top: 8px; transform: translateX(-50%); width: calc(100% - 152px); padding: 12px; }
   .map-empty h2 { font-size: 20px; }
