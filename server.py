@@ -32,7 +32,7 @@ from floodlens.config import (
     Settings,
     load_settings,
 )
-from floodlens.flood import FLOOD_CACHE, fetch_flood_overlay_with_staleness
+from floodlens.flood import FLOOD_BOUNDS, FLOOD_CACHE, fetch_flood_overlay_with_staleness
 from floodlens.limits import Cooldown, RateLimiter
 from floodlens.osm import OSM_CACHE, fetch_osm_with_staleness, simplify_osm
 
@@ -258,6 +258,7 @@ class Handler(SimpleHTTPRequestHandler):
                     {
                         "fixtureMode": self.fixture_dir is not None,
                         "tileProvider": "esri",
+                        "floodBounds": FLOOD_BOUNDS,
                         "pilotBounds": {
                             "south": SOUTH,
                             "west": WEST,

@@ -17,15 +17,26 @@ from floodlens.config import (
 )
 
 FLOOD_CACHE: TTLCache[bytes] = TTLCache(FLOOD_CACHE_TTL)
+FLOOD_BOUNDS = {
+    "south": SOUTH - 0.05,
+    "west": WEST - 0.05,
+    "north": NORTH + 0.05,
+    "east": EAST + 0.05,
+}
 
 
 def flood_overlay_url() -> str:
+    width = FLOOD_BOUNDS["east"] - FLOOD_BOUNDS["west"]
+    height = FLOOD_BOUNDS["north"] - FLOOD_BOUNDS["south"]
+    scale = 1440 / max(width, height)
     params = urlencode(
         {
-            "bbox": f"{WEST - 0.05},{SOUTH - 0.05},{EAST + 0.05},{NORTH + 0.05}",
+            "bbox": ",".join(
+                str(FLOOD_BOUNDS[key]) for key in ("west", "south", "east", "north")
+            ),
             "bboxSR": "4326",
             "imageSR": "4326",
-            "size": "1440,960",
+            "size": f"{round(width * scale)},{round(height * scale)}",
             "format": "png32",
             "transparent": "true",
             "layers": "show:0",
