@@ -5,7 +5,7 @@ import {
   PILOT_BOUNDS as PILOT_FALLBACK,
   TILE_LAYER,
 } from "./config.js";
-import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } from "./geo.js";
+import { describeSnapQuality, formatKm, isInsideBounds, polylineIntersectsBounds, ringAreaSquareMeters } from "./geo.js";
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
 import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
@@ -245,25 +245,30 @@ function isInsidePilot(lat, lon) {
           : null;
       }).filter(Boolean);
     }
-    function drawRoads() {
+    let roadRenderGeneration = 0;
+    async function drawRoads() {
+      const generation = ++roadRenderGeneration;
       roadsLayer.clearLayers();
-      const bounds = map.getBounds?.();
-      const batch = [];
-      const flush = () => {
-        for (const line of batch) line.addTo(roadsLayer);
-        batch.length = 0;
-      };
-      for (const road of osmData.roads) {
+      const viewport = map.getBounds();
+      const bounds = { south: viewport.getSouth(), north: viewport.getNorth(), west: viewport.getWest(), east: viewport.getEast() };
+      const roads = osmData.roads;
+      let batchStart = performance.now();
+      for (let i = 0; i < roads.length; i++) {
+        if (i > 0 && (i % 100 === 0 || performance.now() - batchStart >= 8)) {
+          await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+          if (generation !== roadRenderGeneration) return;
+          batchStart = performance.now();
+        }
+        const road = roads[i];
         // All routable classes are drawn so routes never float over blank tiles.
         if (!["motorway", "trunk", "primary", "secondary", "tertiary", "residential", "unclassified"].includes(road.kind)) continue;
         const minor = !["motorway", "trunk", "primary", "secondary"].includes(road.kind);
         const latlngs = road.points.map((p) => [p.lat, p.lon]);
-        if (bounds && !latlngs.some(([lat, lon]) => bounds.contains([lat, lon]))) continue;
-        batch.push(L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : minor ? 0.8 : 1.25, opacity: minor ? .45 : .64, interactive: false }));
-        if (batch.length >= 500) flush();
+        if (!polylineIntersectsBounds(latlngs, bounds)) continue;
+        L.polyline(latlngs, { color: road.kind === "primary" ? colorToken("--road-primary") : colorToken("--road"), weight: road.kind === "primary" ? 2.0 : minor ? 0.8 : 1.25, opacity: minor ? .45 : .64, interactive: false }).addTo(roadsLayer);
       }
-      flush();
       drawFacilities();
+      map.fire("roads:rendered");
     }
     function drawFacilities() {
       facilitiesLayer.clearLayers();
@@ -750,6 +755,8 @@ function isInsidePilot(lat, lon) {
       updateInstructions("Zona dihapus", "Gambar ulang area untuk membandingkan akses.", false);
     });
     map.on("zoomend", () => { if (osmData) drawFacilities(); });
+    map.on("movestart", () => { roadRenderGeneration++; });
+    map.on("moveend", () => { if (osmData) drawRoads(); });
 
     loadButton.addEventListener("click", () => loadData(hasLoadedData));
     $("cancelLoad").addEventListener("click", () => {
