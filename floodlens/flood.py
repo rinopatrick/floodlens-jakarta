@@ -31,7 +31,9 @@ def flood_overlay_url() -> str:
     scale = 1440 / max(width, height)
     params = urlencode(
         {
-            "bbox": ",".join(str(FLOOD_BOUNDS[key]) for key in ("west", "south", "east", "north")),
+            "bbox": ",".join(
+                str(FLOOD_BOUNDS[key]) for key in ("west", "south", "east", "north")
+            ),
             "bboxSR": "4326",
             "imageSR": "4326",
             "size": f"{round(width * scale)},{round(height * scale)}",

@@ -1,9 +1,9 @@
 import http.client
 import json
 import threading
-from urllib.parse import parse_qs, urlsplit
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import server
 from floodlens.flood import flood_overlay_url
