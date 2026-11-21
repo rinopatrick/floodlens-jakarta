@@ -138,6 +138,40 @@ for (const layout of layouts) {
   test.describe(layout.name, () => {
     test.use({ viewport: { width: layout.width, height: layout.height } });
 
+    test("dragging a corner moves that vertex without inserting one", async ({ page }) => {
+      await enterState(page, "result");
+      await page.evaluate(() => window.floodlensMap.panBy([-65, 50], { animate: false }));
+      await page.locator(".leaflet-draw-edit-edit").click();
+      const vertices = () => page.evaluate(() => {
+        const map = window.floodlensMap;
+        let polygon;
+        map.eachLayer((layer) => {
+          if (layer instanceof window.L.Polygon && layer.editing?.enabled()) polygon = layer;
+        });
+        return polygon.getLatLngs()[0].map((latlng) => {
+          const point = map.latLngToContainerPoint(latlng);
+          return { x: point.x, y: point.y };
+        });
+      });
+      const before = await vertices();
+      expect(before).toHaveLength(4);
+      const box = await page.locator("#map").boundingBox();
+      const start = { x: box.x + before[0].x, y: box.y + before[0].y };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x + 30, start.y - 20, { steps: 10 });
+      await page.mouse.up();
+      const after = await vertices();
+      expect(after).toHaveLength(4);
+      expect(after[0].x).toBeCloseTo(before[0].x + 30, 0);
+      expect(after[0].y).toBeCloseTo(before[0].y - 20, 0);
+      expect(after.slice(1)).toEqual(before.slice(1));
+      for (const handle of await page.locator(".leaflet-marker-draggable").all()) await targetSize(handle);
+      if (process.env.RESPONSIVE_SCREENSHOTS) {
+        await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/${layout.name}-corner-drag.png` });
+      }
+    });
+
     test("map marker and polygon edit targets are at least 44px", async ({ page }) => {
       await enterState(page, "result");
       await expect(page.locator(".health-pin").first()).toBeAttached();
