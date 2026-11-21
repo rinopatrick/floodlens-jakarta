@@ -627,6 +627,7 @@ h1, h2, h3, p { margin-top: 0; }
   .state-pill b { margin-right: 2px; font-size: 10px; }
   .workspace { display: flex; flex-direction: column; }
   .map-region { height: 42%; min-height: 280px; flex: none; border-right: 0; border-bottom: var(--line); }
+  #app[data-hazard="on"]:not([data-fixture="true"]):is([data-state="baseline"], [data-state="result"]) .map-region { min-height: min(360px, 50svh); }
   .leaflet-top.leaflet-left { top: 9px; left: 9px; }
   .leaflet-top.leaflet-right { top: 9px; right: 9px; }
   .leaflet-bottom.leaflet-left { display: none; }
