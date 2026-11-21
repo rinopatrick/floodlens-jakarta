@@ -199,16 +199,17 @@ function isInsidePilot(lat, lon) {
       }
     }
     async function loadRuntimeConfig() {
-      setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
+      setSourceState("bnpbState", "MEMUAT", "");
       $("hazardToggle").checked = false;
       $("hazardToggle").disabled = true;
       $("app").dataset.hazard = "off";
       overlayVisible = false;
       try {
         const response = await fetch("/api/config", { signal: AbortSignal.timeout(5000) });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const config = await response.json();
         addHazardOverlay(config.floodBounds);
+        if (!hazardOverlay) setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
         // Single source of truth: server owns bounds and threshold.
         if (config.pilotBounds && Number.isFinite(config.pilotBounds.south)) {
           PILOT_BOUNDS = { ...config.pilotBounds };
@@ -239,6 +240,7 @@ function isInsidePilot(lat, lon) {
         overlayVisible = false;
         if (hazardOverlay && map.hasLayer(hazardOverlay)) map.removeLayer(hazardOverlay);
       } catch {
+        setSourceState("bnpbState", "TIDAK TERSEDIA", "error");
         // Keep the live-data path when the runtime config is unavailable.
       }
     }

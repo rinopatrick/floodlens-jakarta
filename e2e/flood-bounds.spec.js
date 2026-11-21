@@ -51,6 +51,22 @@ test("hazard image URL changes with the configured extent", async ({ page }) => 
   expect(imageUrls[0].href).not.toBe(imageUrls[1].href);
 });
 
+test("BNPB stays loading until runtime config resolves", async ({ page }) => {
+  let captureRoute;
+  const pendingRoute = new Promise((resolve) => { captureRoute = resolve; });
+  await page.route("**/api/config", (route) => captureRoute(route));
+  await page.goto("/");
+  const route = await pendingRoute;
+  try {
+    await expect(page.locator("#bnpbState")).toHaveText("MEMUAT");
+    await expect(page.locator("#hazardToggle")).toBeDisabled();
+    await expect(page.locator(".hazard-overlay")).toHaveCount(0);
+  } finally {
+    await route.fulfill({ json: { fixtureMode: true } });
+  }
+  await expect(page.locator("#bnpbState")).toHaveText("TIDAK TERSEDIA");
+});
+
 for (const [name, floodBounds] of [
   ["missing", undefined],
   ["null", null],
