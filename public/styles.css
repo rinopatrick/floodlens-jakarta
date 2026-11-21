@@ -248,7 +248,7 @@ h1, h2, h3, p { margin-top: 0; }
   z-index: 450;
   left: 16px;
   right: 16px;
-  bottom: 14px;
+  bottom: 44px;
   display: grid;
   grid-template-columns: 280px minmax(260px, 1fr);
   align-items: end;
@@ -386,7 +386,7 @@ h1, h2, h3, p { margin-top: 0; }
   color: var(--muted) !important;
   font: 10px var(--mono) !important;
 }
-.leaflet-control-attribution { display: none !important; }
+.leaflet-control-attribution { max-width: 100%; padding: 3px 6px !important; background: var(--surface) !important; color: var(--fg); font: 10px/1.4 var(--body); }
 .leaflet-container { font: inherit; background: var(--bg); }
 .leaflet-container a { color: var(--accent); }
 .custom-tooltip {
@@ -640,7 +640,7 @@ h1, h2, h3, p { margin-top: 0; }
   #app[data-state="empty"] .map-empty { top: 50%; }
   .map-empty h2, .map-error h2 { font-size: 21px; }
   .map-empty p, .map-error p { font-size: 11px; }
-  .map-footer { left: 8px; right: 8px; bottom: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+  .map-footer { left: 8px; right: 8px; bottom: 44px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
   .map-legend { padding: 6px 8px 5px; }
   .legend-heading { font-size: 10px; }
   .legend-date { font-size: 9px; }

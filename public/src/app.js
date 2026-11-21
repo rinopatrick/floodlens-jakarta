@@ -21,7 +21,8 @@ function isInsidePilot(lat, lon) {
 
     const cssTokens = getComputedStyle(document.documentElement);
     const colorToken = (name) => cssTokens.getPropertyValue(name).trim();
-    const map = L.map("map", { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
+    const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([-6.22, 106.83], 11);
+    map.attributionControl.setPrefix(false);
     L.control.zoom({ position: "topright" }).addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false, maxWidth: 100 }).addTo(map);
     Object.assign(L.drawLocal.draw.toolbar.actions, {
