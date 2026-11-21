@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 
 import {
@@ -56,6 +57,45 @@ test("buildGraph records nodes, segments, and oneway direction", () => {
   assert.equal((adjacency.get("c") || []).some((edge) => edge.to === "b"), false);
   assert.equal(adjacency.get("d").some((edge) => edge.to === "c"), true);
   assert.equal((adjacency.get("c") || []).some((edge) => edge.to === "d"), false);
+});
+
+function graphFromOsmWay(nodes, latitudes) {
+  const way = {
+    type: "way",
+    id: 9,
+    tags: { highway: "primary" },
+    nodes,
+    geometry: latitudes.map((lat, index) => ({ lat, lon: 106.83 + index / 1000 })),
+  };
+  const data = JSON.parse(execFileSync("python3", [
+    "-c",
+    "import json, sys; from floodlens.osm import simplify_osm; " +
+      "sys.stdout.buffer.write(simplify_osm(json.load(sys.stdin)))",
+  ], {
+    cwd: new URL("../../", import.meta.url),
+    input: JSON.stringify({ elements: [way] }),
+    encoding: "utf8",
+  }));
+
+  return buildGraph(data);
+}
+
+test("buildGraph does not bridge invalid intermediate OSM geometry", () => {
+  const { segments } = graphFromOsmWay([1, 2, 3], [-6.2, null, -6.2]);
+
+  assert.deepEqual(segments.map(({ from, to }) => [from, to]), []);
+});
+
+test("blocking one split road segment leaves the other open", () => {
+  const { adjacency, segments } = graphFromOsmWay(
+    [1, 2, 3, 4, 5],
+    [-6.2, -6.2, -6.4, -6.2, -6.2],
+  );
+
+  assert.deepEqual(segments.map(({ from, to }) => [from, to]), [["1", "2"], ["4", "5"]]);
+  const blocked = new Set([segments[0].key]);
+  assert.equal(dijkstra(adjacency, "1", blocked).distances.has("2"), false);
+  assert.equal(dijkstra(adjacency, "4", blocked).distances.has("5"), true);
 });
 
 test("dijkstra respects oneway roads and blocked segments", () => {

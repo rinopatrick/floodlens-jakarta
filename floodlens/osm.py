@@ -143,27 +143,32 @@ def _process_road(element: dict, roads: list[dict]) -> None:
         or tags.get("motor_vehicle") in {"no", "private"}
     ):
         return
-    # shortcut: a node/geometry length mismatch means the way shape is
-    # untrustworthy; skip it instead of failing the whole payload.
+    runs = []
     points = []
     for node_id, point in zip(nodes, geometry, strict=True):
         coords = _as_point(point)
         if coords is None:
+            if len(points) >= 2:
+                runs.append(points)
+            points = []
             continue
         points.append({"id": str(node_id), "lat": coords[0], "lon": coords[1]})
-    if len(points) < 2:
-        return
-    roads.append(
-        {
-            "id": str(element.get("id")),
-            "name": tags.get("name", "") if isinstance(tags.get("name", ""), str) else "",
-            "kind": highway,
-            "oneway": tags.get(
-                "oneway", "yes" if tags.get("junction") == "roundabout" else "no"
-            ),
-            "points": points,
-        }
-    )
+    if len(points) >= 2:
+        runs.append(points)
+
+    way_id = str(element.get("id"))
+    for index, run in enumerate(runs):
+        roads.append(
+            {
+                "id": way_id if len(run) == len(nodes) else f"{way_id}.{index}",
+                "name": tags.get("name", "") if isinstance(tags.get("name", ""), str) else "",
+                "kind": highway,
+                "oneway": tags.get(
+                    "oneway", "yes" if tags.get("junction") == "roundabout" else "no"
+                ),
+                "points": run,
+            }
+        )
 
 
 def simplify_osm(payload: dict) -> bytes:
