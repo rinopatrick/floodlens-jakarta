@@ -94,6 +94,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("ETag", etag_value)
             self.send_header("Cache-Control", cache)
             self.send_header("Vary", "Accept-Encoding")
+            for name, value in extra_headers:
+                if value:
+                    self.send_header(name, value)
             self._cache_control = cache
             self.end_headers()
             return
@@ -360,13 +363,13 @@ class Handler(SimpleHTTPRequestHandler):
                             "application/json; charset=utf-8",
                             cache=(
                                 "no-store"
-                                if refresh
+                                if refresh or stale
                                 else (
                                     f"public, max-age={OSM_BROWSER_TTL}, "
                                     f"stale-while-revalidate={OSM_BROWSER_STALE_WHILE_REVALIDATE}"
                                 )
                             ),
-                            etag=not refresh,
+                            etag=not (refresh or stale),
                             compress=True,
                             extra_headers=tuple(headers),
                         )

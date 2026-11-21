@@ -109,6 +109,7 @@ h1, h2, h3, p { margin-top: 0; }
   box-shadow: 0 0 0 3px rgba(47, 113, 107, .12);
 }
 #app[data-state="empty"] .status-dot { background: var(--soft); box-shadow: none; }
+.status-dot.stale { background: var(--rust); box-shadow: 0 0 0 3px var(--rust-soft); }
 #app[data-state="error"] .status-dot { background: var(--error); box-shadow: 0 0 0 3px rgba(158, 61, 50, .12); }
 .atlas-index {
   justify-self: end;
@@ -488,6 +489,9 @@ h1, h2, h3, p { margin-top: 0; }
 .source-state { color: var(--muted); font: 10px var(--mono); text-align: right; white-space: nowrap; }
 .source-state.ready { color: var(--success); }
 .source-state.error { color: var(--error); }
+.source-state.stale { color: var(--rust); }
+.stale-notice { margin: 8px 0 0; padding: 8px 12px; border-left: 2px solid var(--rust); background: var(--rust-soft); color: var(--rust-dark); font-size: 11px; line-height: 1.4; }
+.stale-notice[hidden] { display: none; }
 .primary-button, .secondary-button {
   width: 100%;
   min-height: 44px;

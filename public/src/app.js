@@ -8,6 +8,7 @@ import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } f
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
 import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
+import { describeStaleNotice, loadStatus, osmRequestCache, readStaleness } from "./staleness.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
 let MAX_POLYGON_VERTICES = 512;
@@ -155,14 +156,11 @@ function isInsidePilot(lat, lon) {
         : (signal || timeout);
       const response = await fetch(`/api/osm${refresh ? "?refresh=1" : ""}`, {
         signal: requestSignal,
-        cache: refresh ? "no-store" : "default",
+        cache: osmRequestCache(refresh),
       });
       const cooldown = response.headers.get("X-Refresh") === "cooldown";
-      const cooldownWait = response.headers.get("X-Refresh-Retry-After");
+      const cooldownWait = cooldown ? response.headers.get("X-Refresh-Retry-After") : null;
       const data = await response.json().catch(() => ({}));
-      if (cooldown && cooldownWait) {
-        setStatus(`Refresh dibatasi, coba lagi dalam ${cooldownWait} dtk`, "");
-      }
       const error = data.error;
       if (!response.ok || error) {
         const message = typeof error === "string" ? error : error?.message || `HTTP ${response.status}`;
@@ -171,7 +169,12 @@ function isInsidePilot(lat, lon) {
       if (!Array.isArray(data.roads) || !Array.isArray(data.facilities)) {
         throw new Error("Respons data jalan tidak lengkap.");
       }
-      return data;
+      return { data, cooldownWait, ...readStaleness(response.headers) };
+    }
+    function showStaleNotice(stale, ageSeconds) {
+      const notice = $("staleNotice");
+      notice.textContent = stale ? describeStaleNotice(ageSeconds) : "";
+      notice.hidden = !stale;
     }
     function setStatus(text, state = "") {
       connectionText.textContent = text;
@@ -661,7 +664,7 @@ function isInsidePilot(lat, lon) {
       activeLoadController = new AbortController();
       try {
         setLoading(true);
-        const payload = await fetchOsmData(refresh, activeLoadController.signal);
+        const { data: payload, stale, ageSeconds, cooldownWait } = await fetchOsmData(refresh, activeLoadController.signal);
         osmData = payload;
         graphData = buildGraph(osmData);
         spatialIndex = buildSpatialIndex(graphData.nodes);
@@ -672,7 +675,7 @@ function isInsidePilot(lat, lon) {
         drawRoads();
         setupAnalysisWorker();
         setOrigin({ lat: origin.lat, lon: origin.lon }, origin.label);
-        setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, "ready");
+        setSourceState("osmState", `${osmData.roads.length.toLocaleString("id-ID")} RUAS`, stale ? "stale" : "ready");
         $("osmSummary").textContent = `${osmData.roads.length.toLocaleString("id-ID")} ruas · ${facilities.length.toLocaleString("id-ID")} fasilitas`;
         let stamp = "";
         if (payload.dataTimestamp) {
@@ -689,7 +692,9 @@ function isInsidePilot(lat, lon) {
         }
         hasLoadedData = true;
         const fixture = $("app").dataset.fixture === "true";
-        setStatus(fixture ? "Data contoh siap digunakan" : "Data publik siap digunakan", "live");
+        showStaleNotice(stale, ageSeconds);
+        const status = loadStatus({ stale, cooldownWait, fixture });
+        setStatus(status.text, status.state);
         $("loadButtonText").textContent = fixture ? "Perbarui data contoh" : "Perbarui data live";
         setAppState(activePolygon ? "result" : "baseline");
         updateInstructions("Baseline aktif", "Klik peta untuk mengubah titik awal, atau gambar zona terdampak.", false);
@@ -707,6 +712,7 @@ function isInsidePilot(lat, lon) {
             : ($("app").dataset.fixture === "true" ? "Muat data contoh" : "Muat data live");
         } else {
           hasLoadedData = false;
+          showStaleNotice(false);
           setSourceState("osmState", "GAGAL DIMUAT", "error");
           setStatus("Data tidak dapat diakses", "");
           setAppState("error");

@@ -532,3 +532,44 @@ def test_api_response_prelude_is_shared_between_osm_and_flood(monkeypatch):
     assert osm.getheader("X-RateLimit-Limit") == flood.getheader("X-RateLimit-Limit")
     assert osm.getheader("X-Data-Stale") == flood.getheader("X-Data-Stale")
     assert seen == {"osm_refresh": True, "flood_refresh": True}
+
+
+def test_stale_osm_is_never_browser_cached_or_revalidated(monkeypatch):
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    payload = json.dumps({"schemaVersion": 1, "roads": [], "facilities": []}).encode()
+    state = {"stale": False}
+    monkeypatch.setattr(
+        server, "fetch_osm_with_staleness", lambda _refresh=False: (payload, state["stale"])
+    )
+
+    with running_server() as port:
+        fresh, _ = get(port, "/api/osm")
+        etag = fresh.getheader("ETag")
+        state["stale"] = True
+        stale, body = get(port, "/api/osm", headers={"If-None-Match": etag})
+
+    assert etag
+    assert stale.status == 200
+    assert body == payload
+    assert stale.getheader("X-Data-Stale") == "1"
+    assert stale.getheader("Cache-Control") == "no-store"
+    assert stale.getheader("ETag") is None
+
+
+def test_osm_304_carries_current_data_age(monkeypatch):
+    from floodlens.osm import OSM_CACHE
+
+    monkeypatch.setattr(server.Handler, "fixture_dir", None)
+    payload = json.dumps(
+        {"schemaVersion": 1, "dataTimestamp": "2026-10-21T00:00:00Z", "roads": [], "facilities": []}
+    ).encode()
+    monkeypatch.setattr(server, "fetch_osm_with_staleness", lambda _refresh=False: (payload, False))
+    monkeypatch.setattr(OSM_CACHE, "age", lambda: 42.7)
+
+    with running_server() as port:
+        first, _ = get(port, "/api/osm")
+        second, _ = get(port, "/api/osm", headers={"If-None-Match": first.getheader("ETag")})
+
+    assert second.status == 304
+    assert second.getheader("X-Data-Age") == "42"
+    assert second.getheader("X-Data-Timestamp") == "2026-10-21T00:00:00Z"
