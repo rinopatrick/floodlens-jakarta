@@ -116,6 +116,25 @@ for (const state of ["empty", "error"]) {
   });
 }
 
+for (const state of ["baseline", "result", "error"]) {
+  test(`narrow BNPB ${state} leaves fixed map controls hittable`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await enterState(page, state, { bnpb: true });
+    await expect(page.locator(".hazard-block")).toBeVisible();
+    await expect(page.locator(".map-legend")).toBeInViewport({ ratio: 1 });
+    await expect(page.locator(".leaflet-control-attribution")).toBeInViewport({ ratio: 1 });
+    for (const control of await page.locator(".leaflet-draw-toolbar a, .leaflet-control-zoom a, #retryButton:visible").all()) {
+      expect.soft(await control.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      }), await control.getAttribute("title") || await control.textContent()).toBe(true);
+    }
+    if (process.env.RESPONSIVE_SCREENSHOTS) {
+      await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/${state === "result" ? "320x568-bnpb" : `320x568-${state}-bnpb`}.png` });
+    }
+  });
+}
+
 async function targetSize(locator) {
   const box = await locator.boundingBox();
   expect.soft(box.width, `${await locator.evaluate((el) => el.id || el.className)} width`).toBeGreaterThanOrEqual(44);
