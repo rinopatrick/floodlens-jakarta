@@ -272,7 +272,7 @@ function isInsidePilot(lat, lon) {
       const zoom = map.getZoom();
       if (zoom >= 16) {
         for (const facility of facilities) {
-          const icon = L.divIcon({ className: "", html: `<div class="health-pin ${facility.kind === "clinic" ? "clinic" : ""}"></div>`, iconSize: [18, 18], iconAnchor: [9, 15] });
+          const icon = L.divIcon({ className: "map-marker-target", html: `<div class="health-pin ${facility.kind === "clinic" ? "clinic" : ""}"></div>`, iconSize: [44, 44], iconAnchor: [22, 28] });
           L.marker([facility.lat, facility.lon], { icon, keyboard: true, title: facility.name, alt: facility.name }).bindTooltip(`${escapeHtml(facility.name)} · ${facility.kind === "hospital" ? "rumah sakit" : "klinik / puskesmas"}`, { className: "custom-tooltip" }).addTo(facilitiesLayer);
         }
         return;
@@ -291,7 +291,7 @@ function isInsidePilot(lat, lon) {
         const icon = L.divIcon({
           className: "facility-cluster-icon",
           html: `<div class="cluster-bubble ${cluster.hospitals ? "has-hospital" : ""}">${cluster.count}<small>${cluster.hospitals ? `${cluster.hospitals} RS` : "klinik"}</small></div>`,
-          iconSize: [38, 42], iconAnchor: [19, 19]
+          iconSize: [44, 44], iconAnchor: [22, 22]
         });
         const marker = L.marker([lat, lon], { icon, keyboard: true, title: `${cluster.count} fasilitas kesehatan` })
           .bindTooltip(`${cluster.count} fasilitas · ${cluster.hospitals} rumah sakit`, { className: "custom-tooltip" });
@@ -336,7 +336,7 @@ function isInsidePilot(lat, lon) {
     function setOrigin(point, label = "Titik pilihan peta") {
       origin = { lat: point.lat, lon: point.lng ?? point.lon, label };
       if (originMarker) map.removeLayer(originMarker);
-      const icon = L.divIcon({ className: "", html: '<div class="origin-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+      const icon = L.divIcon({ className: "map-marker-target", html: '<div class="origin-pin"></div>', iconSize: [44, 44], iconAnchor: [22, 22] });
       originMarker = L.marker([origin.lat, origin.lon], { icon, keyboard: true, title: "Titik awal perjalanan" }).addTo(map);
       originMarker.bindTooltip("Titik awal", { className: "custom-tooltip" });
       $("originText").textContent = `${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)} · ${origin.label}`;
