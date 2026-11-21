@@ -105,6 +105,28 @@ function isInsidePilot(lat, lon) {
       edit: { featureGroup: scenarioLayers, edit: true, remove: true }
     });
     map.addControl(drawControl);
+    for (const type of ["mousedown", "touchstart", "click"]) {
+      map.getContainer().addEventListener(type, (event) => {
+        const target = event.target.closest(".leaflet-editing-icon");
+        if (!target) return;
+        const point = event.touches?.[0] || event;
+        let nearest = target;
+        let distance = Infinity;
+        for (const handle of map.getContainer().querySelectorAll(".leaflet-editing-icon")) {
+          const box = handle.getBoundingClientRect();
+          if (point.clientX < box.left || point.clientX > box.right || point.clientY < box.top || point.clientY > box.bottom) continue;
+          const offset = Math.hypot(point.clientX - (box.left + box.width / 2), point.clientY - (box.top + box.height / 2));
+          if (offset < distance) {
+            nearest = handle;
+            distance = offset;
+          }
+        }
+        if (nearest === target) return;
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        nearest.dispatchEvent(new event.constructor(event.type, event));
+      }, { capture: true, passive: false });
+    }
     document.querySelectorAll(".leaflet-draw-toolbar a").forEach((link) => {
       link.setAttribute("role", "button");
       link.setAttribute("tabindex", "0");

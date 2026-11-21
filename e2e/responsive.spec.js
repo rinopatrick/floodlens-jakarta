@@ -170,6 +170,16 @@ for (const layout of layouts) {
       if (process.env.RESPONSIVE_SCREENSHOTS) {
         await page.screenshot({ path: `${process.env.RESPONSIVE_SCREENSHOTS}/${layout.name}-corner-drag.png` });
       }
+      const midpoint = { x: (after[1].x + after[2].x) / 2, y: (after[1].y + after[2].y) / 2 };
+      await page.mouse.move(box.x + midpoint.x, box.y + midpoint.y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + midpoint.x + 10, box.y + midpoint.y + 10, { steps: 10 });
+      await page.mouse.up();
+      const expanded = await vertices();
+      expect(expanded).toHaveLength(5);
+      expect(expanded[2].x).toBeCloseTo(midpoint.x + 10, 0);
+      expect(expanded[2].y).toBeCloseTo(midpoint.y + 10, 0);
+      expect(expanded.filter((_, index) => index !== 2)).toEqual(after);
     });
 
     test("map marker and polygon edit targets are at least 44px", async ({ page }) => {
