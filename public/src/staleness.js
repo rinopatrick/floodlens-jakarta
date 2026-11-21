@@ -18,3 +18,7 @@ export function describeStaleNotice(ageSeconds) {
   const base = "Pembaruan dari OpenStreetMap gagal. Menampilkan data cache terakhir";
   return age ? `${base} (${age}).` : `${base}.`;
 }
+
+export function osmRequestCache(refresh) {
+  return refresh ? "no-store" : "no-cache";
+}

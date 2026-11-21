@@ -9,7 +9,7 @@ import { describeSnapQuality, formatKm, isInsideBounds, ringAreaSquareMeters } f
 import { closedSegmentsFor } from "./analysis.js";
 import { buildRenderPayload } from "./analysis-payload.js";
 import { buildGraph, buildSpatialIndex, dijkstra, nearestNodeWithDistance } from "./graph.js";
-import { describeStaleNotice, readStaleness } from "./staleness.js";
+import { describeStaleNotice, osmRequestCache, readStaleness } from "./staleness.js";
 let PILOT_BOUNDS = { ...PILOT_FALLBACK };
 let MAX_ACCESS_METERS = MAX_ACCESS_FALLBACK;
 let MAX_POLYGON_VERTICES = 512;
@@ -145,7 +145,7 @@ function isInsidePilot(lat, lon) {
         : (signal || timeout);
       const response = await fetch(`/api/osm${refresh ? "?refresh=1" : ""}`, {
         signal: requestSignal,
-        cache: refresh ? "no-store" : "default",
+        cache: osmRequestCache(refresh),
       });
       const cooldown = response.headers.get("X-Refresh") === "cooldown";
       const cooldownWait = response.headers.get("X-Refresh-Retry-After");

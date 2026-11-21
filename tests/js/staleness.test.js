@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { describeStaleNotice, formatDataAge, readStaleness } from "../../public/src/staleness.js";
+import { describeStaleNotice, formatDataAge, osmRequestCache, readStaleness } from "../../public/src/staleness.js";
 
 const headers = (values) => new Headers(values);
 
@@ -52,4 +52,9 @@ test("describeStaleNotice says refresh failed and includes the age when known", 
     describeStaleNotice(null),
     "Pembaruan dari OpenStreetMap gagal. Menampilkan data cache terakhir.",
   );
+});
+
+test("osmRequestCache always revalidates normal loads and bypasses the cache on refresh", () => {
+  assert.equal(osmRequestCache(false), "no-cache");
+  assert.equal(osmRequestCache(true), "no-store");
 });
